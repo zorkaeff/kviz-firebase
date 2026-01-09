@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Kviz rezultati</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #chart_div { width: 100%; height: 400px; }
+  </style>
+</head>
+<body>
+
+<h2>Rezultati kviza</h2>
+<div id="chart_div"></div>
+
+<script>
+  // 🔑 Ovdje stavi svoje Firebase podatke:
+  const firebaseConfig = {
+    apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+    authDomain: "hpddd-b9bef.firebaseapp.com",
+    databaseURL: "https://hpddd-b9bef-default-rtdb.firebaseio.com",
+    projectId: "hpddd-b9bef"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // Google Charts
+  google.charts.load('current', {'packages':['corechart']});
+  google.charts.setOnLoadCallback(() => drawChart([['Odgovor','Broj']]));
+
+  let chart, data;
+  function drawChart(chartData) {
+    data = google.visualization.arrayToDataTable(chartData);
+    chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
+    chart.draw(data, {title: 'Broj odgovora po opciji', legend: {position: 'none'}});
+  }
+
+  // Primanje odgovora iz involve.me
+  window.addEventListener("message", event => {
+    const msg = event.data;
+    if (msg.player && msg.answer) {
+      db.ref("answers").push({
+        player: msg.player,
+        answer: msg.answer,
+        time: Date.now()
+      });
+    }
+  });
+
+  // Real-time update graf
+  db.ref("answers").on("value", snapshot => {
+    const counts = {};
+    snapshot.forEach(child => {
+      const ans = child.val().answer;
+      counts[ans] = (counts[ans] || 0) + 1;
+    });
+    const chartData = [['Odgovor','Broj']];
+    for (const key in counts) chartData.push([key, counts[key]]);
+    drawChart(chartData);
+  });
+</script>
+
+</body>
+</html>
