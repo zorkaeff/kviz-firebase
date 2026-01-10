@@ -4,8 +4,6 @@
 <meta charset="UTF-8" />
 <title>Kviz</title>
 
-<link rel="icon" href="/favicon.ico" />
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -92,48 +90,3 @@ const interval = setInterval(() => {
 function answerMain(choice) {
   if (mainAnswered) return;
   mainAnswered = true;
-  if (choice === "?") usedLukavac = true;
-  db.ref("results/" + player).set({
-    main: choice,
-    usedLukavac
-  });
-}
-
-function endMainPhase() {
-  clearInterval(interval);
-  if (!mainAnswered) {
-    usedLukavac = true;
-    db.ref("results/" + player).set({ main:"?", usedLukavac });
-  }
-  if (usedLukavac) startLukavac();
-}
-
-/* ⏱ FAZA 2 */
-function startLukavac() {
-  document.getElementById("mainPhase").classList.add("hidden");
-  document.getElementById("lukavacPhase").classList.remove("hidden");
-
-  let t = 10;
-  const luk = setInterval(() => {
-    document.getElementById("timer").innerText = t;
-    t--;
-    if (t < 0) {
-      clearInterval(luk);
-      autoFailLukavac();
-    }
-  }, 1000);
-}
-
-function answerLukavac(choice) {
-  const pts = calcLukavac(choice);
-  db.ref("results/" + player).update({ lukavac: choice, points: pts });
-  document.getElementById("lukavacPhase").innerHTML = "Odgovor spremljen";
-}
-
-function autoFailLukavac() {
-  db.ref("results/" + player).update({ lukavac:"AUTO", points:-50 });
-}
-</script>
-
-</body>
-</html>
