@@ -2,30 +2,45 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8" />
-<title>Kviz – Igrači</title>
+<title>Kviz – Admin</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; width:140px; }
-#answers { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; max-width:320px; margin:auto; }
-.timer { font-size:48px; margin:20px; color:yellow; }
-.locked button { opacity:0.5; pointer-events:none; }
+button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; }
+#players { margin:20px auto; width:60%; border-collapse:collapse; }
+#players th, #players td { border:1px solid white; padding:6px; text-align:center; }
+th { background:#222; }
+#controls { display:none; margin-top:20px; }
 </style>
 </head>
 <body>
 
-<h2>Kviz</h2>
-<div id="status">Čekanje admina…</div>
-<div class="timer" id="timer">--</div>
+<h2>Admin – Kviz</h2>
 
-<div id="question" style="font-size:26px;margin:20px"></div>
-<div id="answers"></div>
-<div id="waiting"></div>
+<div id="loginDiv">
+  <input type="password" id="adminkey" placeholder="Admin ključ" />
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="controls">
+  <button onclick="startGame()">▶ Start kruga</button>
+  <button onclick="pauseGame()">⏸ Pauza</button>
+  <button onclick="nextQuestion()">➡ Sljedeće pitanje</button>
+  <button onclick="eliminate()">❌ Eliminiraj zadnjeg</button>
+</div>
+
+<h3>Prijavljeni igrači</h3>
+<table id="players">
+  <thead>
+    <tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
 
 <script>
-const player = localStorage.getItem("player") || prompt("Ime igrača");
-localStorage.setItem("player", player);
+// Admin ključ (promijeni po želji)
+const ADMIN_KEY = "tajni123";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
@@ -39,59 +54,91 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// registriraj igrača
-db.ref(`players/${player}`).set(true);
+// 🔐 Login funkcija
+function login(){
+  const key = document.getElementById("adminkey").value;
+  if(key===ADMIN_KEY){
+    document.getElementById("controls").style.display="block";
+    document.getElementById("loginDiv").style.display="none";
+    updatePlayers();
+  } else {
+    alert("Krivi ključ");
+  }
+}
 
-let currentPhase = "lobby";
-let answered = false;
+// Start kruga
+function startGame(){
+  const now = Date.now();
+  db.ref('game').update({phase:'main', phaseEndsAt: now + 20000}); // 20s main
+  alert("Krug startan!");
+}
 
-function renderAnswers() {
-  const div = document.getElementById("answers");
-  div.innerHTML = "";
-  ['A','B','C','D'].forEach(l=>{
-    ['!','.','?'].forEach(s=>{
-      const b=document.createElement('button');
-      b.innerText=l+s;
-      b.onclick=()=>submit(l+s);
-      div.appendChild(b);
-    });
+// Pauza
+function pauseGame(){
+  db.ref('game').update({phase:'paused'});
+}
+
+// Sljedeće pitanje
+function nextQuestion(){
+  db.ref('game').once('value',snap=>{
+    const g = snap.val() || {round:0,question:0};
+    const next = {
+      round: g.round || 1,
+      question: (g.question||0)+1,
+      phase: 'main',
+      phaseEndsAt: Date.now() + 20000,
+      questionText: `Pitanje ${g.question+1 || 1}`,
+      correct: 'A'
+    };
+    db.ref('game').set(next);
   });
 }
 
-function submit(choice){
-  if(answered) return;
-  answered=true;
-  db.ref(`answers/${player}`).set({choice,time:Date.now()});
-  document.getElementById("answers").classList.add("locked");
+// Ručna eliminacija
+function eliminate(){
+  db.ref('results').once('value', snap => {
+    const players = [];
+    snap.forEach(ch => {
+      const r = ch.val();
+      players.push({
+        name: ch.key,
+        points: r.points || 0,
+        question: r.question || 0,
+        exclam: r.exclam || 0,
+        time: r.time || 0
+      });
+    });
+    if(players.length<=1){ alert("Ne može eliminirati – ostao je jedan igrač"); return; }
+
+    players.sort((a,b)=>{
+      if(a.points!==b.points) return a.points-b.points;
+      if(a.question!==b.question) return a.question-b.question;
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
+      return b.time-a.time;
+    });
+
+    const eliminated = players[0];
+    if(confirm(`Eliminirati ${eliminated.name}?`)){
+      db.ref(`players/${eliminated.name}`).remove();
+      db.ref(`eliminated/${eliminated.name}`).set({ at: Date.now() });
+      alert(`${eliminated.name} je eliminiran`);
+    }
+  });
 }
 
-// slušaj stanje igre
-db.ref('game').on('value',snap=>{
-  const g=snap.val();
-  if(!g) return;
-  currentPhase=g.phase;
-  document.getElementById("status").innerText = g.status;
-
-  if(g.phase==='main' || g.phase==='questionMark'){
-    document.getElementById("question").innerText=g.questionText;
-    renderAnswers();
-    answered=false;
-    document.getElementById("answers").classList.remove("locked");
-  }
-
-  if(g.phase==='reveal'){
-    document.getElementById("answers").innerHTML="Točan odgovor: "+g.correct;
-  }
-
-  if(g.phaseEndsAt){
-    const tick=()=>{
-      const left=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
-      document.getElementById("timer").innerText=left+'s';
-    };
-    tick();
-    setInterval(tick,1000);
-  }
-});
+// Prikaz igrača i bodova
+function updatePlayers(){
+  db.ref('results').on('value',snap=>{
+    const tbody = document.querySelector('#players tbody');
+    tbody.innerHTML="";
+    snap.forEach(ch=>{
+      const r = ch.val();
+      const tr = document.createElement('tr');
+      tr.innerHTML=`<td>${ch.key}</td><td>${r.points||0}</td><td>${r.exclam||0}</td><td>${r.question||0}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
 </script>
 </body>
 </html>
