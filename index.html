@@ -52,11 +52,29 @@ const player = localStorage.getItem("player") || prompt("Ime igrača:");
 localStorage.setItem("player", player);
 
 /* 🔥 FIREBASE */
-firebase.initializeApp({
+// Your web app's Firebase configuration
+
+const firebaseConfig = {
+
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+
   databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef"
-});
+
+  projectId: "hpddd-b9bef",
+
+  storageBucket: "hpddd-b9bef.firebasestorage.app",
+
+  messagingSenderId: "520105963434",
+
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+
+};
+
+
+  
+firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 /* 🔢 BODOVI */
