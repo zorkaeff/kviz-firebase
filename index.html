@@ -47,14 +47,18 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const quizStartTime = Date.now() + 5000;
+// 🔥 POSTAVI VRIJEME POČETKA KVIZA (danas 15:10)
+const quizStartDate = new Date();
+quizStartDate.setHours(15,10,0,0);
+const quizStartTime = quizStartDate.getTime();
+
 const rounds = 6;
 const questionsPerRound = 10;
 let currentRound = 0;
 let currentQuestionIndex = 0;
 let timerInterval;
 
-// 🔥 6 KRUGOVA × 10 PITANJA
+// 🔥 6 KRUGOVA × 10 PITANJA (primjeri)
 const allQuestions = [
   [
     { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
@@ -68,7 +72,7 @@ const allQuestions = [
     { text:"Koji broj dolazi nakon 9?", correct:"C", options:["7","8","10","11"] },
     { text:"Koja životinja ima dugi vrat?", correct:"B", options:["Slon","Žirafa","Konj","Lav"] }
   ],
-  [
+  [ /* Krug 2 */
     { text:"Koja je najveća životinja na svijetu?", correct:"A", options:["Plavi kit","Slon","Medvjed","Lav"] },
     { text:"Koja je boja banane?", correct:"B", options:["Plava","Žuta","Crvena","Zelena"] },
     { text:"Koji mjesec dolazi nakon lipnja?", correct:"C", options:["Svibanj","Srpanj","Srpanj","Kolovoz"] },
@@ -80,7 +84,7 @@ const allQuestions = [
     { text:"Koja životinja daje mlijeko?", correct:"A", options:["Krava","Ovca","Pas","Mačka"] },
     { text:"Koji je glavni grad Hrvatske?", correct:"B", options:["Split","Zagreb","Rijeka","Osijek"] }
   ],
-  [
+  [ /* Krug 3 */
     { text:"Koji kontinent je najveći?", correct:"C", options:["Afrika","Europa","Azija","Antarktika"] },
     { text:"Koja je boja naranče?", correct:"D", options:["Plava","Zelena","Crvena","Narančasta"] },
     { text:"Koja životinja je kralj džungle?", correct:"A", options:["Lav","Tigar","Slon","Leopard"] },
@@ -92,9 +96,9 @@ const allQuestions = [
     { text:"Koliko kontinenata postoji?", correct:"C", options:["5","6","7","8"] },
     { text:"Koji je najbrži kopneni sisavac?", correct:"D", options:["Slon","Konj","Tigar","Gepard"] }
   ],
-  [/* Krug 4 */],
-  [/* Krug 5 */],
-  [/* Krug 6 */]
+  [ /* Krug 4 */ ],
+  [ /* Krug 5 */ ],
+  [ /* Krug 6 */ ]
 ];
 
 function calcPoints(choice, correct) {
