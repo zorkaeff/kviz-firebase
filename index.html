@@ -7,11 +7,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:6px; padding:12px 18px; font-size:18px; cursor:pointer; }
+button { margin:6px; padding:12px 18px; font-size:20px; cursor:pointer; display:block; width:100px; margin-left:auto; margin-right:auto; }
 .hidden { display:none; }
-.timer { font-size:32px; margin:10px; }
+.timer { font-size:36px; margin:10px; }
 table { margin:auto; border-collapse: collapse; width: 80%; }
 th, td { border: 1px solid white; padding: 6px; }
+#optionsText { font-size:20px; margin:10px; }
 </style>
 </head>
 <body>
@@ -50,7 +51,7 @@ const db = firebase.database();
 
 // 🔥 POSTAVI VRIJEME POČETKA KVIZA (danas 15:10)
 const quizStartDate = new Date();
-quizStartDate.setHours(15,10,0,0);
+quizStartDate.setHours(15,24,0,0);
 const quizStartTime = quizStartDate.getTime();
 
 const rounds = 6;
@@ -87,12 +88,19 @@ function calcPoints(choice, correct) {
   return 0;
 }
 
-// 🔥 START KVIZA
-setTimeout(()=>{
+function startQuiz(){
   document.getElementById("timer").innerText = "Kviz počinje!";
   document.getElementById("questionPhase").classList.remove("hidden");
   startQuestion(currentRound,currentQuestionIndex);
-}, quizStartTime - Date.now());
+}
+
+// 🔥 START KVIZA S PROVJEROM
+const now = Date.now();
+if (quizStartTime > now) {
+  setTimeout(startQuiz, quizStartTime - now);
+} else {
+  document.getElementById("timer").innerText = "Čekanje sljedećeg kviza...";
+}
 
 function startQuestion(round,index){
   if(round>=rounds) return;
@@ -101,7 +109,7 @@ function startQuestion(round,index){
   document.getElementById("roundInfo").innerText = `Krug ${round+1}, Pitanje ${index+1}`;
 
   // Prikaz ponuđenih odgovora
-  document.getElementById("optionsText").innerHTML = `A: ${question.options[0]} | B: ${question.options[1]} | C: ${question.options[2]} | D: ${question.options[3]}`;
+  document.getElementById("optionsText").innerHTML = question.options.map((opt,i)=>`${String.fromCharCode(65+i)}: ${opt}`).join('<br>');
 
   const buttonsDiv = document.getElementById("answerButtons");
   buttonsDiv.innerHTML='';
@@ -130,7 +138,7 @@ function startTimer(round,index){
 }
 
 function submitAnswer(choice,correct){
-  clearInterval(timerInterval);
+  // Ne zaustavljamo timer da svi imaju puni vremenski prozor
   const points=calcPoints(choice,correct);
   const elapsed=20-(parseInt(document.getElementById("timer").innerText.match(/\d+/))||0);
   db.ref(`results/${player}`).once('value',snap=>{
@@ -140,7 +148,6 @@ function submitAnswer(choice,correct){
     data.points+=points;
     data.timeUsed+=elapsed;
     db.ref(`results/${player}`).set(data);
-    showNext(currentRound,currentQuestionIndex+1);
   });
 }
 
