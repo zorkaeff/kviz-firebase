@@ -1,52 +1,45 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8">
-<title>Multiplayer Turnir Kviz</title>
-<link rel="icon" href="data:,">
+<meta charset="UTF-8" />
+<title>Kviz</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:4px; padding:8px 12px; font-size:16px; cursor:pointer; }
+button { margin:6px; padding:12px 18px; font-size:18px; cursor:pointer; }
 .hidden { display:none; }
 .timer { font-size:32px; margin:10px; }
-#leaderboardTable { margin:auto; margin-top:20px; color:white; border-collapse: collapse; }
-#leaderboardTable th, #leaderboardTable td { border:1px solid white; padding:4px 8px; }
-.correct { color: #0f0; }
-.wrong { color: #f33; }
+table { margin:auto; border-collapse: collapse; width: 80%; }
+th, td { border: 1px solid white; padding: 6px; }
 </style>
 </head>
 <body>
 
-<h2 id="questionText">Čekanje na početak kviza...</h2>
-<p id="lobbyInfo">Čekanje na početak kviza...</p>
-<p id="roundInfo">Krug: - | Pitanje: -</p>
-<p id="valueInfo">Točan ! odgovor: -</p>
-<div class="timer" id="timer">00</div>
-<div id="answerButtons" class="hidden"></div>
+<h2>Kviz Pitanja</h2>
+<div class="timer" id="timer">Čekanje starta kviza...</div>
 
-<h3>Trenutni poredak</h3>
-<table id="leaderboardTable">
+<div id="questionPhase" class="hidden">
+  <h3 id="questionText"></h3>
+  <div id="answerButtons"></div>
+</div>
+
+<canvas id="chart" class="hidden"></canvas>
+
+<h3>Leaderboard</h3>
+<table id="leaderboard">
   <thead>
-    <tr>
-      <th>Poredak</th>
-      <th>Igrač</th>
-      <th>Bodovi</th>
-      <th>! odgovori</th>
-      <th>? odgovori</th>
-      <th>Vrijeme (s)</th>
-    </tr>
+    <tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th><th>Vrijeme (s)</th></tr>
   </thead>
   <tbody></tbody>
 </table>
 
-<canvas id="scoreChart" width="600" height="300"></canvas>
-
 <script>
-/* ===================== FIREBASE ===================== */
+// 🔥 KONFIGURACIJA
+const player = localStorage.getItem("player") || prompt("Ime igrača:");
+localStorage.setItem("player", player);
+
+// 🔥 FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain: "hpddd-b9bef.firebaseapp.com",
@@ -59,189 +52,100 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-/* ===================== ANONYMOUS AUTH ===================== */
-let playerName, uid;
-firebase.auth().signInAnonymously()
-  .then(() => {
-    uid = firebase.auth().currentUser.uid;
-    if(!localStorage.getItem("playerName")){
-      do { playerName = prompt("Unesi ime igrača:")?.trim(); } while(!playerName);
-      localStorage.setItem("playerName", playerName);
-    }
-    playerName = localStorage.getItem("playerName");
+// 🔥 KONFIGURACIJA KVIZA
+const quizStartTime = Date.now() + 5000; // start za 5 sekundi od sada (za test)
+const rounds = 6;
+const questionsPerRound = 10;
 
-    db.ref("tournament/players/"+uid).set({
-      name: playerName,
-      joinedAt: Date.now(),
-      totalPoints:0,
-      usedExclam:0,
-      usedLukavac:0,
-      totalAnswerTime:0,
-      eliminated:false
-    });
+// 🔥 6 KRUGOVA × 10 PITANJA
+const allQuestions = [
+  // Krug 1
+  [
+    { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
+    { text:"Koja boja je nebo?", correct:"A", options:["Plava","Zelena","Crvena","Žuta"] },
+    { text:"Koji planet je najbliži Suncu?", correct:"B", options:["Venera","Merkur","Mars","Jupiter"] },
+    { text:"Koji dan dolazi nakon ponedjeljka?", correct:"D", options:["Petak","Nedjelja","Srijeda","Utorak"] },
+    { text:"Koja životinja mjauče?", correct:"C", options:["Pas","Krava","Mačka","Ovca"] },
+    { text:"Koja je suprotnost riječi 'vruće'?", correct:"A", options:["Hladno","Toplo","Vlažno","Suho"] },
+    { text:"Koliko sati ima jedan dan?", correct:"B", options:["12","24","36","48"] },
+    { text:"Koja boja nastaje miješanjem plave i žute?", correct:"D", options:["Crvena","Zelena","Ljubičasta","Zelena"] },
+    { text:"Koji broj dolazi nakon 9?", correct:"C", options:["7","8","10","11"] },
+    { text:"Koja životinja ima dugi vrat?", correct:"B", options:["Slon","Žirafa","Konj","Lav"] }
+  ],
+  // Krug 2
+  [
+    { text:"Koja je najveća životinja na svijetu?", correct:"A", options:["Plavi kit","Slon","Medvjed","Lav"] },
+    { text:"Koja je boja banane?", correct:"B", options:["Plava","Žuta","Crvena","Zelena"] },
+    { text:"Koji mjesec dolazi nakon lipnja?", correct:"C", options:["Svibanj","Srpanj","Srpanj","Kolovoz"] },
+    { text:"Koliko je 5 x 5?", correct:"D", options:["20","15","25","25"] },
+    { text:"Koja ptica ne može letjeti?", correct:"A", options:["Pingvin","Golub","Lastavica","Orao"] },
+    { text:"Koja država je poznata po piramidama?", correct:"B", options:["Italija","Egipat","Grčka","Meksiko"] },
+    { text:"Koji je oblik nogometne lopte?", correct:"C", options:["Kvadrat","Trokut","Kugla","Pravougaonik"] },
+    { text:"Koja planeta je poznata kao crvena planeta?", correct:"D", options:["Jupiter","Venera","Saturn","Mars"] },
+    { text:"Koja životinja daje mlijeko?", correct:"A", options:["Krava","Ovca","Pas","Mačka"] },
+    { text:"Koji je glavni grad Hrvatske?", correct:"B", options:["Split","Zagreb","Rijeka","Osijek"] }
+  ],
+  // Krug 3
+  [
+    { text:"Koji kontinent je najveći?", correct:"C", options:["Afrika","Europa","Azija","Antarktika"] },
+    { text:"Koja je boja naranče?", correct:"D", options:["Plava","Zelena","Crvena","Narančasta"] },
+    { text:"Koja životinja je kralj džungle?", correct:"A", options:["Lav","Tigar","Slon","Leopard"] },
+    { text:"Koliko dana ima veljača (ne prestupna godina)?", correct:"B", options:["30","28","29","31"] },
+    { text:"Koja riba ima škrge?", correct:"C", options:["Kit","Ajkula","Riba","Delfin"] },
+    { text:"Koja država je poznata po sushi-ju?", correct:"D", options:["Kina","Tajland","Vijetnam","Japan"] },
+    { text:"Koji instrument ima tipke i svira se rukama?", correct:"A", options:["Piano","Gitara","Bubanj","Violina"] },
+    { text:"Koji sport uključuje reket i lopticu?", correct:"B", options:["Nogomet","Tenis","Košarka","Odbojka"] },
+    { text:"Koliko kontinenata postoji?", correct:"C", options:["5","6","7","8"] },
+    { text:"Koji je najbrži kopneni sisavac?", correct:"D", options:["Slon","Konj","Tigar","Gepard"] }
+  ],
+  // Krug 4
+  [
+    { text:"Koja država ima Eiffelov toranj?", correct:"A", options:["Francuska","Italija","Španjolska","Njemačka"] },
+    { text:"Koja je boja trave?", correct:"B", options:["Plava","Zelena","Crvena","Žuta"] },
+    { text:"Koji planet je poznat po svojim prstenovima?", correct:"C", options:["Mars","Jupiter","Saturn","Neptun"] },
+    { text:"Koliko je 9 - 3?", correct:"D", options:["5","7","6","6"] },
+    { text:"Koja životinja ima crno-bijele pruge?", correct:"A", options:["Zebra","Tigar","Lav","Slon"] },
+    { text:"Koji je najveći ocean?", correct:"B", options:["Atlantski","Tihi","Indijski","Arktički"] },
+    { text:"Koji instrument svira zrakom kroz cijev?", correct:"C", options:["Gitaru","Bubanj","Trubu","Klavir"] },
+    { text:"Koja ptica je simbol mira?", correct:"D", options:["Sokol","Orao","Golub","Vrana"] },
+    { text:"Koji metal je teži, željezo ili aluminij?", correct:"A", options:["Željezo","Aluminij","Bakar","Olovo"] },
+    { text:"Koja rijeka prolazi kroz London?", correct:"B", options:["Seine","Temza","Dunav","Nil"] }
+  ],
+  // Krug 5
+  [
+    { text:"Koji je kemijski simbol za vodu?", correct:"C", options:["H","O","H2O","CO2"] },
+    { text:"Koja boja nastaje miješanjem crvene i bijele?", correct:"D", options:["Ljubičasta","Plava","Ružičasta","Ružičasta"] },
+    { text:"Koliko nogu ima pauk?", correct:"A", options:["8","6","4","10"] },
+    { text:"Koji je glavni grad Italije?", correct:"B", options:["Pariz","Rim","Madrid","London"] },
+    { text:"Koja životinja je poznata po mijaukanju?", correct:"C", options:["Pas","Krava","Mačka","Ovca"] },
+    { text:"Koja planeta je najveća u Sunčevom sustavu?", correct:"D", options:["Mars","Venera","Jupiter","Saturn"] },
+    { text:"Koji instrument svira se udaranjem?", correct:"A", options:["Bubanj","Piano","Violina","Gitara"] },
+    { text:"Koja riba ima bodlje?", correct:"B", options:["Tuna","Kirnja","Kozica","Šaran"] },
+    { text:"Koji kontinent ima najviše država?", correct:"C", options:["Afrika","Europa","Azija","Afrika"] },
+    { text:"Koja ptica ne može letjeti?", correct:"D", options:["Orao","Sokoli","Pingvin","Golub"] }
+  ],
+  // Krug 6
+  [
+    { text:"Koja životinja je simbol Australije?", correct:"A", options:["Kengur","Koala","Emu","Dingo"] },
+    { text:"Koji je najviši vrh na svijetu?", correct:"B", options:["K2","Mount Everest","Kilimandžaro","Mont Blanc"] },
+    { text:"Koja država ima najviše stanovnika?", correct:"C", options:["Indija","Brazil","Kina","SAD"] },
+    { text:"Koji sport koristi loptu i mrežu?", correct:"D", options:["Nogomet","Košarka","Odbojka","Rukomet"] },
+    { text:"Koja biljka daje čaj?", correct:"A", options:["Čaj","Kava","Kakao","Vanilija"] },
+    { text:"Koji planet je plavi?", correct:"B", options:["Mars","Neptun","Jupiter","Venera"] },
+    { text:"Koliko mjeseci ima godina?", correct:"C", options:["10","12","11","13"] },
+    { text:"Koja ptica gradi gnijezda od blata?", correct:"D", options:["Golub","Lastavica","Vrana","Ciganka"] },
+    { text:"Koja država je poznata po pizzama?", correct:"A", options:["Italija","Francuska","Španjolska","Njemačka"] },
+    { text:"Koja životinja je kralj džungle?", correct:"B", options:["Tigar","Lav","Slon","Leopard"] }
+  ]
+];
 
-    startLobby();
-  })
-  .catch(e=>{ console.error("Auth error:",e); alert("Greška s autentifikacijom."); });
-
-/* ===================== LOBBY ===================== */
-const lobbyInfo = document.getElementById("lobbyInfo");
-const roundInfoEl = document.getElementById("roundInfo");
-const valueInfoEl = document.getElementById("valueInfo");
-const questionText = document.getElementById("questionText");
-const answerButtons = document.getElementById("answerButtons");
-const timerEl = document.getElementById("timer");
-
-let currentRound=1, currentQuestionIndex=0, questionStartTime=0;
-const rounds=6, questionsPerRound=10;
-const baseExclamValue=100; // raste po krugu
-
-/* ===================== PITANJA ===================== */
-// 6 krugova × 10 pitanja = 60 pitanja
-// Copy/paste pitanja iz prethodnog primjera (allQuestions)
-const allQuestions = [ /* ...6x10 pitanja... */ ];
-
-/* ===================== LOBBY START ===================== */
-const quizStartTime = new Date("2026-01-10T14:50:00+01:00").getTime();
-
-function startLobby(){
-  const interval = setInterval(()=>{
-    const now = Date.now();
-    if(now >= quizStartTime){
-      clearInterval(interval);
-      startQuestion();
-    } else {
-      const diff = Math.floor((quizStartTime - now)/1000);
-      lobbyInfo.innerText = `Kviz počinje za ${diff} sekundi`;
-    }
-  },1000);
-}
-
-/* ===================== KVIZ LOGIKA ===================== */
-let mainAnswered=false, usedLukavac=false, mainTimer=null, lukavacTimer=null;
-
-// Start pitanja
-function startQuestion(){
-  if(currentQuestionIndex>=questionsPerRound){
-    pauseBeforeNextRound();
-    return;
-  }
-  mainAnswered=false; usedLukavac=false;
-  const q = allQuestions[currentRound-1][currentQuestionIndex];
-  currentCorrect = q.correct;
-  questionText.innerText = q.text;
-  roundInfoEl.innerText = `Krug: ${currentRound} | Pitanje: ${currentQuestionIndex+1}`;
-  valueInfoEl.innerText = `Točan ! odgovor: ${baseExclamValue*currentRound}`;
-  answerButtons.innerHTML = '';
-  answerButtons.classList.remove("hidden");
-  q.options.forEach((opt,i)=>{
-    const letter = String.fromCharCode(65+i); // A,B,C,D
-    const btn = document.createElement("button");
-    btn.innerText = `${letter}!`;
-    btn.onclick = ()=>answerMain(letter+"!");
-    answerButtons.appendChild(btn);
-    const btn2 = document.createElement("button");
-    btn2.innerText = `${letter}.`;
-    btn2.onclick = ()=>answerMain(letter+".");
-    answerButtons.appendChild(btn2);
-    const btn3 = document.createElement("button");
-    btn3.innerText = `${letter}?`;
-    btn3.onclick = ()=>answerMain(letter+"?");
-    answerButtons.appendChild(btn3);
-  });
-  questionStartTime = Date.now();
-  startMainTimer();
-}
-
-// Glavni timer 20s
-let timeLeft=20;
-function startMainTimer(){
-  timerEl.innerText = timeLeft;
-  mainTimer = setInterval(()=>{
-    timerEl.innerText = timeLeft;
-    timeLeft--;
-    if(timeLeft<0){
-      clearInterval(mainTimer);
-      endMainPhase();
-    }
-  },1000);
-}
-
-// Odgovor glavne faze
-function answerMain(choice){
-  if(mainAnswered) return;
-  mainAnswered=true;
-  if(choice[1]=="?") usedLukavac=true;
-  const pts = calculateMainPoints(choice);
-  const answerTime = Math.floor((Date.now()-questionStartTime)/1000);
-  db.ref(`tournament/results/${currentRound}_${currentQuestionIndex}/${uid}`).set({
-    player:playerName,
-    choice, pts, answerTime
-  });
-  if(choice[1]=="?") startLukavacPhase();
-}
-
-// Izračun bodova glavne faze
-function calculateMainPoints(choice){
-  const letter = choice[0];
-  const type = choice[1];
-  if(letter===currentCorrect) return type=="!"? baseExclamValue*currentRound : 50;
-  else return type=="!"? -baseExclamValue*currentRound : 0;
-}
-
-// Lukavac faza 10s
-function startLukavacPhase(){
-  timeLeft=10; timerEl.innerText=timeLeft;
-  lukavacTimer = setInterval(()=>{
-    timerEl.innerText = timeLeft;
-    timeLeft--;
-    if(timeLeft<0){
-      clearInterval(lukavacTimer);
-      autoFailLukavac();
-      showResultsPhase();
-    }
-  },1000);
-}
-
-// Auto fail
-function autoFailLukavac(){
-  db.ref(`tournament/results/${currentRound}_${currentQuestionIndex}/${uid}`).update({choice:"AUTO", pts:-50});
-}
-
-// Prikaz rezultata
-function showResultsPhase(){
-  // ovdje se prikazuje bodovi svih igrača, update leaderboard, graf
-  updateLeaderboardTable();
-  currentQuestionIndex++;
-  setTimeout(()=>{ startQuestion(); },10000); // 10s prikaz rezultata
-}
-
-// Leaderboard
-function updateLeaderboardTable(){
-  db.ref('tournament/players').once('value').then(snap=>{
-    const data = snap.val();
-    const tbody = document.querySelector("#leaderboardTable tbody");
-    tbody.innerHTML='';
-    const arr = Object.values(data).sort((a,b)=>b.totalPoints-a.totalPoints);
-    arr.forEach((p,i)=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i+1}</td><td>${p.name}</td><td>${p.totalPoints}</td><td>${p.usedExclam}</td><td>${p.usedLukavac}</td><td>${p.totalAnswerTime}</td>`;
-      tbody.appendChild(tr);
-    });
-  });
-}
-
-// Pauza između krugova 3 min
-function pauseBeforeNextRound(){
-  questionText.innerText=`Pauza između krugova. Sljedeći krug počinje za 3 minute.`;
-  answerButtons.classList.add("hidden");
-  setTimeout(()=>{
-    currentRound++;
-    currentQuestionIndex=0;
-    if(currentRound>rounds){ questionText.innerText="Turnir gotov!"; return; }
-    startQuestion();
-  },3*60*1000);
-}
+// 🔥 OVDE IDE FUNKCIJA START LOBBY, TIMER, FAZE ?, BODOVI, LEADERBOARD, PAUZE...
+// Za test odmah možeš koristiti start kviza:
+setTimeout(() => {
+  document.getElementById("timer").innerText = "Kviz počinje!";
+  document.getElementById("questionPhase").classList.remove("hidden");
+  // Ovdje bi zvao funkciju startQuestion(0,0)
+}, quizStartTime - Date.now());
 </script>
 </body>
 </html>
