@@ -1,66 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="hr">
 <head>
-  <meta charset="UTF-8">
-  <title>Kviz rezultati</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #chart_div { width: 100%; height: 400px; }
-  </style>
+<meta charset="UTF-8" />
+<title>Kviz</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body { font-family: Arial; background:#111; color:white; text-align:center; }
+button { margin:6px; padding:12px 18px; font-size:18px; cursor:pointer; }
+.hidden { display:none; }
+.timer { font-size:32px; margin:10px; }
+</style>
 </head>
+
 <body>
 
-<h2>Rezultati kviza</h2>
-<div id="chart_div"></div>
+<h2>Kviz pitanje</h2>
+<div class="timer" id="timer">20</div>
+
+<!-- FAZA 1 -->
+<div id="mainPhase">
+  <button onclick="answerMain('A!')">A!</button>
+  <button onclick="answerMain('A.')">A.</button>
+  <button onclick="answerMain('B!')">B!</button>
+  <button onclick="answerMain('B.')">B.</button>
+  <button onclick="answerMain('C!')">C!</button>
+  <button onclick="answerMain('C.')">C.</button>
+  <button onclick="answerMain('D!')">D!</button>
+  <button onclick="answerMain('D.')">D.</button>
+  <button onclick="answerMain('?')">?</button>
+</div>
+
+<!-- FAZA 2 -->
+<div id="lukavacPhase" class="hidden">
+  <h3>Lukavac – 10 sekundi</h3>
+  <button onclick="answerLukavac('A')">A?</button>
+  <button onclick="answerLukavac('B')">B?</button>
+  <button onclick="answerLukavac('C')">C?</button>
+  <button onclick="answerLukavac('D')">D?</button>
+</div>
+
+<canvas id="chart" class="hidden"></canvas>
 
 <script>
-  // 🔑 Ovdje stavi svoje Firebase podatke:
-  const firebaseConfig = {
-    apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-    authDomain: "hpddd-b9bef.firebaseapp.com",
-    databaseURL: "https://hpddd-b9bef-default-rtdb.firebaseio.com",
-    projectId: "hpddd-b9bef"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+/* 🔥 KONFIGURACIJA */
+const correctAnswer = "C"; // TOČAN ODGOVOR
+const player = localStorage.getItem("player") || prompt("Ime igrača:");
+localStorage.setItem("player", player);
 
-  // Google Charts
-  google.charts.load('current', {'packages':['corechart']});
-  google.charts.setOnLoadCallback(() => drawChart([['Odgovor','Broj']]));
+/* 🔥 FIREBASE */
+firebase.initializeApp({
+  apiKey: "API_KEY",
+  databaseURL: "https://PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "PROJECT_ID"
+});
+const db = firebase.database();
 
-  let chart, data;
-  function drawChart(chartData) {
-    data = google.visualization.arrayToDataTable(chartData);
-    chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
-    chart.draw(data, {title: 'Broj odgovora po opciji', legend: {position: 'none'}});
+/* 🔢 BODOVI */
+function calcMain(choice) {
+  if (choice === "?") return null;
+  const a = choice[0], t = choice[1];
+  if (a !== correctAnswer) return t === "!" ? -100 : 0;
+  return t === "!" ? 100 : 50;
+}
+function calcLukavac(choice) {
+  return choice === correctAnswer ? 50 : -50;
+}
+
+/* ⏱ FAZA 1 */
+let time = 20;
+let mainAnswered = false;
+let usedLukavac = false;
+
+const interval = setInterval(() => {
+  document.getElementById("timer").innerText = time;
+  time--;
+  if (time < 0) endMainPhase();
+}, 1000);
+
+function answerMain(choice) {
+  if (mainAnswered) return;
+  mainAnswered = true;
+
+  if (choice === "?") usedLukavac = true;
+
+  db.ref("results/" + player).set({
+    main: choice,
+    usedLukavac
+  });
+}
+
+function endMainPhase() {
+  clearInterval(interval);
+  if (!mainAnswered) {
+    usedLukavac = true;
+    db.ref("results/" + player).set({ main:"?", usedLukavac });
   }
+  if (usedLukavac) startLukavac();
+}
 
-  // Primanje odgovora iz involve.me
-  window.addEventListener("message", event => {
-    const msg = event.data;
-    if (msg.player && msg.answer) {
-      db.ref("answers").push({
-        player: msg.player,
-        answer: msg.answer,
-        time: Date.now()
-      });
+/* ⏱ FAZA 2 */
+function startLukavac() {
+  document.getElementById("mainPhase").classList.add("hidden");
+  document.getElementById("lukavacPhase").classList.remove("hidden");
+
+  let t = 10;
+  const luk = setInterval(() => {
+    document.getElementById("timer").innerText = t;
+    t--;
+    if (t < 0) {
+      clearInterval(luk);
+      autoFailLukavac();
     }
-  });
+  }, 1000);
+}
 
-  // Real-time update graf
-  db.ref("answers").on("value", snapshot => {
-    const counts = {};
-    snapshot.forEach(child => {
-      const ans = child.val().answer;
-      counts[ans] = (counts[ans] || 0) + 1;
-    });
-    const chartData = [['Odgovor','Broj']];
-    for (const key in counts) chartData.push([key, counts[key]]);
-    drawChart(chartData);
-  });
+function answerLukavac(choice) {
+  const pts = calcLukavac(choice);
+  db.ref("results/" + player).update({ lukavac: choice, points: pts });
+  document.getElementById("lukavacPhase").innerHTML = "Odgovor spremljen";
+}
+
+function autoFailLukavac() {
+  db.ref("results/" + player).update({ lukavac:"AUTO", points:-50 });
+}
 </script>
 
 </body>
