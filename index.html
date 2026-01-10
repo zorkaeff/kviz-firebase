@@ -9,7 +9,7 @@
 body { font-family: Arial; background:#111; color:white; text-align:center; }
 button { margin:6px; padding:12px 18px; font-size:20px; cursor:pointer; display:block; width:120px; margin-left:auto; margin-right:auto; }
 .hidden { display:none; }
-.timer { font-size:36px; margin:10px; }
+#timer { font-size:48px; color: yellow; margin: 20px auto; text-align: center; z-index: 1000; }
 table { margin:auto; border-collapse: collapse; width: 80%; }
 th, td { border: 1px solid white; padding: 6px; }
 #optionsText { font-size:20px; margin:10px; }
@@ -49,17 +49,14 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 🔥 Fiksni datum i vrijeme početka kviza u CET (Hrvatska)
 // 10.01.2026 u 15:40 CET → 14:40 UTC
 const quizStartTime = Date.UTC(2026, 0, 10, 14, 40, 0);
-
 const rounds = 6;
 const questionsPerRound = 10;
 let currentRound = 0;
 let currentQuestionIndex = 0;
 let questionTimer;
-let questionDuration = 20; // sekunde za regularni odgovor
-
+let questionDuration = 20;
 const allQuestions = [
   [
     { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
@@ -85,23 +82,24 @@ function startQuiz(){
   startQuestion(currentRound,currentQuestionIndex);
 }
 
-// 🔥 Start kviza s countdown display koristeći server time offset
+// Countdown koristeći server time offset
 db.ref('.info/serverTimeOffset').once('value').then(offsetSnap => {
-  const offset = offsetSnap.val() || 0;
-  const serverNow = Date.now() + offset;
-  const countdownMs = quizStartTime - serverNow;
+  const serverOffset = offsetSnap.val() || 0;
+  const serverNow = Date.now() + serverOffset;
+  let countdownMs = quizStartTime - serverNow;
+  const timerDiv = document.getElementById("timer");
 
   if(countdownMs > 0){
-      let timeLeft = Math.floor(countdownMs / 1000);
-      const timerDiv = document.getElementById("timer");
-      const interval = setInterval(()=>{
-          timerDiv.innerText = `Kviz počinje za ${timeLeft}s`;
-          timeLeft--;
-          if(timeLeft<0){
+      let secondsLeft = Math.ceil(countdownMs / 1000);
+      timerDiv.innerText = `Kviz počinje za ${secondsLeft}s`;
+      const interval = setInterval(() => {
+          secondsLeft--;
+          timerDiv.innerText = `Kviz počinje za ${secondsLeft}s`;
+          if(secondsLeft <= 0){
               clearInterval(interval);
               startQuiz();
           }
-      },1000);
+      }, 1000);
   } else {
       startQuiz();
   }
