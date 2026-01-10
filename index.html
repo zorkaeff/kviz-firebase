@@ -2,39 +2,29 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8" />
-<title>Kviz</title>
+<title>Kviz – Igrači</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:6px; padding:12px 18px; font-size:20px; cursor:pointer; display:block; width:120px; margin-left:auto; margin-right:auto; }
-.hidden { display:none; }
-#timer { font-size:48px; color: yellow; margin: 20px auto; text-align: center; z-index: 1000; }
-table { margin:auto; border-collapse: collapse; width: 80%; }
-th, td { border: 1px solid white; padding: 6px; }
-#optionsText { font-size:20px; margin:10px; }
+button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; width:140px; }
+#answers { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; max-width:320px; margin:auto; }
+.timer { font-size:48px; margin:20px; color:yellow; }
+.locked button { opacity:0.5; pointer-events:none; }
 </style>
 </head>
 <body>
 
-<h2>Kviz Pitanja</h2>
-<div class="timer" id="timer">Čekanje starta kviza...</div>
-<div id="questionPhase" class="hidden">
-  <h3 id="questionText"></h3>
-  <div id="optionsText"></div>
-  <div id="answerButtons"></div>
-  <div id="roundInfo"></div>
-</div>
-<h3>Leaderboard</h3>
-<table id="leaderboard">
-  <thead>
-    <tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th><th>Vrijeme (s)</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
+<h2>Kviz</h2>
+<div id="status">Čekanje admina…</div>
+<div class="timer" id="timer">--</div>
+
+<div id="question" style="font-size:26px;margin:20px"></div>
+<div id="answers"></div>
+<div id="waiting"></div>
 
 <script>
-const player = localStorage.getItem("player") || prompt("Ime igrača:");
+const player = localStorage.getItem("player") || prompt("Ime igrača");
 localStorage.setItem("player", player);
 
 const firebaseConfig = {
@@ -49,139 +39,59 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 10.01.2026 u 15:40 CET → 14:40 UTC
-const quizStartTime = Date.UTC(2026, 0, 10, 14, 40, 0);
-const rounds = 6;
-const questionsPerRound = 10;
-let currentRound = 0;
-let currentQuestionIndex = 0;
-let questionTimer;
-let questionDuration = 20;
-const allQuestions = [
-  [
-    { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
-    { text:"Koja boja je nebo?", correct:"A", options:["Plava","Zelena","Crvena","Žuta"] }
-  ],
-  [ /* Krug 2 */ ],
-  [ /* Krug 3 */ ],
-  [ /* Krug 4 */ ],
-  [ /* Krug 5 */ ],
-  [ /* Krug 6 */ ]
-];
+// registriraj igrača
+db.ref(`players/${player}`).set(true);
 
-function calcPoints(choice, correct) {
-  if(choice.endsWith('!')) return choice[0]===correct ? 100 : -100;
-  if(choice.endsWith('.')) return choice[0]===correct ? 50 : 0;
-  if(choice.endsWith('?')) return choice[0]===correct ? 50 : -50;
-  return 0;
+let currentPhase = "lobby";
+let answered = false;
+
+function renderAnswers() {
+  const div = document.getElementById("answers");
+  div.innerHTML = "";
+  ['A','B','C','D'].forEach(l=>{
+    ['!','.','?'].forEach(s=>{
+      const b=document.createElement('button');
+      b.innerText=l+s;
+      b.onclick=()=>submit(l+s);
+      div.appendChild(b);
+    });
+  });
 }
 
-function startQuiz(){
-  document.getElementById("timer").innerText = "Kviz počinje!";
-  document.getElementById("questionPhase").classList.remove("hidden");
-  startQuestion(currentRound,currentQuestionIndex);
+function submit(choice){
+  if(answered) return;
+  answered=true;
+  db.ref(`answers/${player}`).set({choice,time:Date.now()});
+  document.getElementById("answers").classList.add("locked");
 }
 
-// Countdown koristeći server time offset
-db.ref('.info/serverTimeOffset').once('value').then(offsetSnap => {
-  const serverOffset = offsetSnap.val() || 0;
-  const serverNow = Date.now() + serverOffset;
-  let countdownMs = quizStartTime - serverNow;
-  const timerDiv = document.getElementById("timer");
+// slušaj stanje igre
+db.ref('game').on('value',snap=>{
+  const g=snap.val();
+  if(!g) return;
+  currentPhase=g.phase;
+  document.getElementById("status").innerText = g.status;
 
-  if(countdownMs > 0){
-      let secondsLeft = Math.ceil(countdownMs / 1000);
-      timerDiv.innerText = `Kviz počinje za ${secondsLeft}s`;
-      const interval = setInterval(() => {
-          secondsLeft--;
-          timerDiv.innerText = `Kviz počinje za ${secondsLeft}s`;
-          if(secondsLeft <= 0){
-              clearInterval(interval);
-              startQuiz();
-          }
-      }, 1000);
-  } else {
-      startQuiz();
+  if(g.phase==='main' || g.phase==='questionMark'){
+    document.getElementById("question").innerText=g.questionText;
+    renderAnswers();
+    answered=false;
+    document.getElementById("answers").classList.remove("locked");
+  }
+
+  if(g.phase==='reveal'){
+    document.getElementById("answers").innerHTML="Točan odgovor: "+g.correct;
+  }
+
+  if(g.phaseEndsAt){
+    const tick=()=>{
+      const left=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
+      document.getElementById("timer").innerText=left+'s';
+    };
+    tick();
+    setInterval(tick,1000);
   }
 });
-
-function startQuestion(round,index){
-  if(round>=rounds) return;
-  const question = allQuestions[round][index];
-  document.getElementById("questionText").innerText = question.text;
-  document.getElementById("roundInfo").innerText = `Krug ${round+1}, Pitanje ${index+1}`;
-  document.getElementById("optionsText").innerHTML = question.options.map((opt,i)=>`${String.fromCharCode(65+i)}: ${opt}`).join('<br>');
-
-  const buttonsDiv = document.getElementById("answerButtons");
-  buttonsDiv.innerHTML='';
-  ['A','B','C','D'].forEach(opt=>{
-    ['.','!','?'].forEach(suffix=>{
-      const btn=document.createElement('button');
-      btn.innerText = opt+suffix;
-      btn.onclick=()=>submitAnswer(opt+suffix);
-      buttonsDiv.appendChild(btn);
-    });
-  });
-
-  let timeLeft = questionDuration;
-  questionTimer = setInterval(()=>{
-    document.getElementById("timer").innerText=`Vrijeme: ${timeLeft}s`;
-    timeLeft--;
-    if(timeLeft<0){
-      clearInterval(questionTimer);
-      processQuestionAnswers(round,index);
-    }
-  },1000);
-}
-
-function submitAnswer(choice){
-  db.ref(`answers/${currentRound}/${currentQuestionIndex}/${player}`).set({choice, timestamp: Date.now()});
-}
-
-function processQuestionAnswers(round,index){
-  db.ref(`answers/${round}/${index}`).once('value',snap=>{
-    const allAnswers = snap.val() || {};
-    for(const p in allAnswers){
-      const choice = allAnswers[p].choice;
-      const correct = allQuestions[round][index].correct;
-      const points = calcPoints(choice,correct);
-      db.ref(`results/${p}`).once('value',rsnap=>{
-        let data = rsnap.val() || {points:0,exclam:0,questionMarks:0,timeUsed:0};
-        if(choice.endsWith('!')) data.exclam++;
-        if(choice.endsWith('?')) data.questionMarks++;
-        data.points += points;
-        db.ref(`results/${p}`).set(data);
-        updateLeaderboard();
-      });
-    }
-  });
-  setTimeout(()=>{
-    currentQuestionIndex++;
-    if(currentQuestionIndex>=questionsPerRound){
-      currentRound++; currentQuestionIndex=0;
-    }
-    if(currentRound<rounds) startQuestion(currentRound,currentQuestionIndex);
-  },40000);
-}
-
-function updateLeaderboard(){
-  db.ref('results').once('value',snap=>{
-    const tbody=document.querySelector('#leaderboard tbody');
-    tbody.innerHTML='';
-    const players=[];
-    snap.forEach(ch=>players.push({name:ch.key,...ch.val()}));
-    players.sort((a,b)=>{
-      if(b.points!==a.points) return b.points-a.points;
-      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
-      return 0;
-    });
-    players.forEach(p=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${p.name}</td><td>${p.points}</td><td>${p.exclam}</td><td>${p.questionMarks}</td><td>${p.timeUsed}</td>`;
-      tbody.appendChild(tr);
-    });
-  });
-}
 </script>
 </body>
 </html>
