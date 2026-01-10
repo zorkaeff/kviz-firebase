@@ -1,144 +1,183 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8" />
-<title>Kviz – Admin</title>
+<meta charset="UTF-8">
+<title>Kviz – Igrači</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; }
-#players { margin:20px auto; width:60%; border-collapse:collapse; }
-#players th, #players td { border:1px solid white; padding:6px; text-align:center; }
+#question { font-size:28px; margin:20px; }
+#answers { display:grid; grid-template-columns: 1fr 1fr; gap:10px; max-width:400px; margin:auto; }
+button { padding:14px 20px; font-size:22px; }
+.locked button { opacity:0.5; pointer-events:none; }
+.timer { font-size:48px; margin:20px; color:yellow; }
+#waiting { font-size:18px; margin:10px; color:orange; }
+#pointsInfo { margin:10px; font-size:18px; color:lightgreen; }
+#leaderboard { margin:20px auto; width:70%; border-collapse:collapse; }
+#leaderboard th, #leaderboard td { border:1px solid white; padding:6px; text-align:center; }
+#vizLeaderboard { max-width:400px; margin:auto; text-align:left; font-size:18px; border:1px solid #444; padding:5px; }
 th { background:#222; }
-#controls { display:none; margin-top:20px; }
 </style>
 </head>
 <body>
 
-<h2>Admin – Kviz</h2>
+<h2>Kviz</h2>
+<div class="timer" id="timer">--</div>
+<div id="question">Čekanje starta kviza…</div>
+<div id="pointsInfo"></div>
+<div id="answers"></div>
+<div id="waiting"></div>
 
-<div id="loginDiv">
-  <input type="password" id="adminkey" placeholder="Admin ključ" />
-  <button onclick="login()">Login</button>
-</div>
-
-<div id="controls">
-  <button onclick="startGame()">▶ Start kruga</button>
-  <button onclick="pauseGame()">⏸ Pauza</button>
-  <button onclick="nextQuestion()">➡ Sljedeće pitanje</button>
-  <button onclick="eliminate()">❌ Eliminiraj zadnjeg</button>
-</div>
-
-<h3>Prijavljeni igrači</h3>
-<table id="players">
-  <thead>
-    <tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th></tr>
-  </thead>
+<h3>Leaderboard</h3>
+<table id="leaderboard">
+  <thead><tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th></tr></thead>
   <tbody></tbody>
 </table>
 
+<h3>Vizualni leaderboard (real-time)</h3>
+<div id="vizLeaderboard"></div>
+
 <script>
-// Admin ključ (promijeni po želji)
-const ADMIN_KEY = "tajni123";
+// ================= KONFIGURACIJA =================
+const player = localStorage.getItem("player") || prompt("Ime igrača:");
+localStorage.setItem("player", player);
 
 const firebaseConfig = {
-  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+  apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain:"hpddd-b9bef.firebaseapp.com",
+  databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"hpddd-b9bef",
+  storageBucket:"hpddd-b9bef.appspot.com",
+  messagingSenderId:"520105963434",
+  appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 🔐 Login funkcija
-function login(){
-  const key = document.getElementById("adminkey").value;
-  if(key===ADMIN_KEY){
-    document.getElementById("controls").style.display="block";
-    document.getElementById("loginDiv").style.display="none";
-    updatePlayers();
-  } else {
-    alert("Krivi ključ");
+db.ref(`players/${player}`).set({ joined: Date.now() });
+
+let answered = false;
+let currentQuestion = null;
+
+// ============ ODGOVORI =============
+function renderAnswers(choices=['A','B','C','D']){
+  const div=document.getElementById("answers"); div.innerHTML="";
+  choices.forEach(l=>['!','.','?'].forEach(m=>{
+    const b=document.createElement('button'); b.innerText=l+m; b.onclick=()=>submit(l+m); div.appendChild(b);
+  }));
+}
+
+function submit(choice){
+  if(answered) return;
+  answered=true;
+  db.ref(`answers/${currentQuestion}/${player}`).set({choice,time:Date.now()});
+  document.getElementById("answers").classList.add("locked");
+}
+
+// ================= SLUŠANJE KVIZA =================
+db.ref('game').on('value', snap=>{
+  const g=snap.val(); if(!g) return;
+
+  if(g.phase==='paused'){
+    document.getElementById("question").innerText="Kviz pauziran…";
+    document.getElementById("answers").classList.add("locked");
+    return;
   }
-}
 
-// Start kruga
-function startGame(){
-  const now = Date.now();
-  db.ref('game').update({phase:'main', phaseEndsAt: now + 20000}); // 20s main
-  alert("Krug startan!");
-}
+  if(g.phase==='main'||g.phase==='questionMark'){
+    currentQuestion=`${g.round}_${g.question}`;
+    document.getElementById("question").innerText=g.questionText;
+    document.getElementById("pointsInfo").innerText=`Bodovi: !=${g.values['!']} €, .=${g.values['.']} €, ?=${g.values['?']} €`;
+    renderAnswers(g.choices||['A','B','C','D']); answered=false;
+    document.getElementById("answers").classList.remove("locked");
+  }
 
-// Pauza
-function pauseGame(){
-  db.ref('game').update({phase:'paused'});
-}
+  if(g.phase==='reveal'){ showReveal(g); }
 
-// Sljedeće pitanje
-function nextQuestion(){
-  db.ref('game').once('value',snap=>{
-    const g = snap.val() || {round:0,question:0};
-    const next = {
-      round: g.round || 1,
-      question: (g.question||0)+1,
-      phase: 'main',
-      phaseEndsAt: Date.now() + 20000,
-      questionText: `Pitanje ${g.question+1 || 1}`,
-      correct: 'A'
+  if(g.phaseEndsAt){
+    const tick=()=>{
+      const left=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
+      document.getElementById("timer").innerText=left+'s';
     };
-    db.ref('game').set(next);
+    tick(); clearInterval(window.t); window.t=setInterval(tick,1000);
+  }
+});
+
+// ================= ČEKANJE ODGOVORA =================
+function updateWaiting(){
+  if(!currentQuestion) return;
+  db.ref('players').once('value',pSnap=>{
+    db.ref(`answers/${currentQuestion}`).once('value',aSnap=>{
+      const waiting=[]; pSnap.forEach(p=>{ if(!aSnap.hasChild(p.key)) waiting.push(p.key); });
+      document.getElementById("waiting").innerText = waiting.length ? `Čekamo: ${waiting.join(', ')}` : "Svi su odgovorili";
+    });
+  });
+}
+setInterval(updateWaiting,1000);
+
+// ================= REVEAL + BODOVI =================
+function showReveal(g){
+  db.ref(`answers/${currentQuestion}`).once('value',snap=>{
+    snap.forEach(ch=>{
+      const {choice}=ch.val();
+      const letter=choice[0], mod=choice[1], correct=letter===g.correct;
+      const delta = correct ? g.values[mod] : g.values.wrong[mod];
+
+      db.ref(`results/${ch.key}`).transaction(r=>{
+        if(!r) r={points:0,exclam:0,question:0,time:0};
+        r.points+=delta; if(mod==='!') r.exclam++; if(mod==='?') r.question++;
+        r.time+=(ch.val().time || 0);
+        return r;
+      });
+    });
+    document.getElementById("answers").innerHTML=`Točan odgovor: <b>${g.correct}</b>`;
   });
 }
 
-// Ručna eliminacija
-function eliminate(){
-  db.ref('results').once('value', snap => {
-    const players = [];
-    snap.forEach(ch => {
+// ================= LEADERBOARD =================
+db.ref('results').on('value',snap=>{
+  const tbody=document.querySelector('#leaderboard tbody'); tbody.innerHTML="";
+  snap.forEach(ch=>{
+    const r=ch.val(); 
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${ch.key}</td><td>${r.points||0}</td><td>${r.exclam||0}</td><td>${r.question||0}</td>`;
+    tbody.appendChild(tr);
+  });
+});
+
+// ================ VIZUALNI LEADERBOARD =================
+function updateVizLeaderboard(){
+  db.ref('results').once('value').then(snap=>{
+    const players=[];
+    snap.forEach(ch=>{
       const r = ch.val();
       players.push({
         name: ch.key,
-        points: r.points || 0,
-        question: r.question || 0,
-        exclam: r.exclam || 0,
-        time: r.time || 0
+        points: r.points||0,
+        exclam: r.exclam||0,
+        question: r.question||0,
+        time: r.time||0
       });
     });
-    if(players.length<=1){ alert("Ne može eliminirati – ostao je jedan igrač"); return; }
-
+    // Sortiranje prema pravilima
     players.sort((a,b)=>{
-      if(a.points!==b.points) return a.points-b.points;
-      if(a.question!==b.question) return a.question-b.question;
+      if(a.points!==b.points) return b.points-a.points;
       if(a.exclam!==b.exclam) return a.exclam-b.exclam;
-      return b.time-a.time;
+      if(a.question!==b.question) return a.question-b.question;
+      return a.time-b.time;
     });
-
-    const eliminated = players[0];
-    if(confirm(`Eliminirati ${eliminated.name}?`)){
-      db.ref(`players/${eliminated.name}`).remove();
-      db.ref(`eliminated/${eliminated.name}`).set({ at: Date.now() });
-      alert(`${eliminated.name} je eliminiran`);
-    }
-  });
-}
-
-// Prikaz igrača i bodova
-function updatePlayers(){
-  db.ref('results').on('value',snap=>{
-    const tbody = document.querySelector('#players tbody');
-    tbody.innerHTML="";
-    snap.forEach(ch=>{
-      const r = ch.val();
-      const tr = document.createElement('tr');
-      tr.innerHTML=`<td>${ch.key}</td><td>${r.points||0}</td><td>${r.exclam||0}</td><td>${r.question||0}</td>`;
-      tbody.appendChild(tr);
+    const div = document.getElementById("vizLeaderboard");
+    div.innerHTML = "";
+    players.forEach((p,i)=>{
+      const line = document.createElement("div");
+      line.style.padding="4px"; line.style.borderBottom="1px solid #444";
+      line.innerHTML = `${i+1}. ${p.name} – ${p.points} € | !:${p.exclam} ?:${p.question} | ${Math.floor(p.time/1000)}s`;
+      div.appendChild(line);
     });
   });
 }
+setInterval(updateVizLeaderboard,2000);
 </script>
 </body>
 </html>
