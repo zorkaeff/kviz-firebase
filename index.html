@@ -20,6 +20,7 @@ th, td { border: 1px solid white; padding: 6px; }
 <div class="timer" id="timer">Čekanje starta kviza...</div>
 <div id="questionPhase" class="hidden">
   <h3 id="questionText"></h3>
+  <div id="optionsText"></div>
   <div id="answerButtons"></div>
   <div id="roundInfo"></div>
 </div>
@@ -58,7 +59,7 @@ let currentRound = 0;
 let currentQuestionIndex = 0;
 let timerInterval;
 
-// 🔥 6 KRUGOVA × 10 PITANJA (primjeri)
+// 🔥 6 KRUGOVA × 10 PITANJA
 const allQuestions = [
   [
     { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
@@ -72,30 +73,8 @@ const allQuestions = [
     { text:"Koji broj dolazi nakon 9?", correct:"C", options:["7","8","10","11"] },
     { text:"Koja životinja ima dugi vrat?", correct:"B", options:["Slon","Žirafa","Konj","Lav"] }
   ],
-  [ /* Krug 2 */
-    { text:"Koja je najveća životinja na svijetu?", correct:"A", options:["Plavi kit","Slon","Medvjed","Lav"] },
-    { text:"Koja je boja banane?", correct:"B", options:["Plava","Žuta","Crvena","Zelena"] },
-    { text:"Koji mjesec dolazi nakon lipnja?", correct:"C", options:["Svibanj","Srpanj","Srpanj","Kolovoz"] },
-    { text:"Koliko je 5 x 5?", correct:"D", options:["20","15","25","25"] },
-    { text:"Koja ptica ne može letjeti?", correct:"A", options:["Pingvin","Golub","Lastavica","Orao"] },
-    { text:"Koja država je poznata po piramidama?", correct:"B", options:["Italija","Egipat","Grčka","Meksiko"] },
-    { text:"Koji je oblik nogometne lopte?", correct:"C", options:["Kvadrat","Trokut","Kugla","Pravougaonik"] },
-    { text:"Koja planeta je poznata kao crvena planeta?", correct:"D", options:["Jupiter","Venera","Saturn","Mars"] },
-    { text:"Koja životinja daje mlijeko?", correct:"A", options:["Krava","Ovca","Pas","Mačka"] },
-    { text:"Koji je glavni grad Hrvatske?", correct:"B", options:["Split","Zagreb","Rijeka","Osijek"] }
-  ],
-  [ /* Krug 3 */
-    { text:"Koji kontinent je najveći?", correct:"C", options:["Afrika","Europa","Azija","Antarktika"] },
-    { text:"Koja je boja naranče?", correct:"D", options:["Plava","Zelena","Crvena","Narančasta"] },
-    { text:"Koja životinja je kralj džungle?", correct:"A", options:["Lav","Tigar","Slon","Leopard"] },
-    { text:"Koliko dana ima veljača (ne prestupna godina)?", correct:"B", options:["30","28","29","31"] },
-    { text:"Koja riba ima škrge?", correct:"C", options:["Kit","Ajkula","Riba","Delfin"] },
-    { text:"Koja država je poznata po sushi-ju?", correct:"D", options:["Kina","Tajland","Vijetnam","Japan"] },
-    { text:"Koji instrument ima tipke i svira se rukama?", correct:"A", options:["Piano","Gitara","Bubanj","Violina"] },
-    { text:"Koji sport uključuje reket i lopticu?", correct:"B", options:["Nogomet","Tenis","Košarka","Odbojka"] },
-    { text:"Koliko kontinenata postoji?", correct:"C", options:["5","6","7","8"] },
-    { text:"Koji je najbrži kopneni sisavac?", correct:"D", options:["Slon","Konj","Tigar","Gepard"] }
-  ],
+  [ /* Krug 2 */ ],
+  [ /* Krug 3 */ ],
   [ /* Krug 4 */ ],
   [ /* Krug 5 */ ],
   [ /* Krug 6 */ ]
@@ -108,6 +87,7 @@ function calcPoints(choice, correct) {
   return 0;
 }
 
+// 🔥 START KVIZA
 setTimeout(()=>{
   document.getElementById("timer").innerText = "Kviz počinje!";
   document.getElementById("questionPhase").classList.remove("hidden");
@@ -119,6 +99,10 @@ function startQuestion(round,index){
   const question = allQuestions[round][index];
   document.getElementById("questionText").innerText = question.text;
   document.getElementById("roundInfo").innerText = `Krug ${round+1}, Pitanje ${index+1}`;
+
+  // Prikaz ponuđenih odgovora
+  document.getElementById("optionsText").innerHTML = `A: ${question.options[0]} | B: ${question.options[1]} | C: ${question.options[2]} | D: ${question.options[3]}`;
+
   const buttonsDiv = document.getElementById("answerButtons");
   buttonsDiv.innerHTML='';
   ['A','B','C','D'].forEach(opt=>{
@@ -129,6 +113,7 @@ function startQuestion(round,index){
       buttonsDiv.appendChild(btn);
     });
   });
+
   startTimer(round,index);
 }
 
