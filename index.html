@@ -85,4 +85,109 @@ const allQuestions = [
     { text:"Koja je boja naranče?", correct:"D", options:["Plava","Zelena","Crvena","Narančasta"] },
     { text:"Koja životinja je kralj džungle?", correct:"A", options:["Lav","Tigar","Slon","Leopard"] },
     { text:"Koliko dana ima veljača (ne prestupna godina)?", correct:"B", options:["30","28","29","31"] },
-    { text:"Koja r
+    { text:"Koja riba ima škrge?", correct:"C", options:["Kit","Ajkula","Riba","Delfin"] },
+    { text:"Koja država je poznata po sushi-ju?", correct:"D", options:["Kina","Tajland","Vijetnam","Japan"] },
+    { text:"Koji instrument ima tipke i svira se rukama?", correct:"A", options:["Piano","Gitara","Bubanj","Violina"] },
+    { text:"Koji sport uključuje reket i lopticu?", correct:"B", options:["Nogomet","Tenis","Košarka","Odbojka"] },
+    { text:"Koliko kontinenata postoji?", correct:"C", options:["5","6","7","8"] },
+    { text:"Koji je najbrži kopneni sisavac?", correct:"D", options:["Slon","Konj","Tigar","Gepard"] }
+  ],
+  [/* Krug 4 */],
+  [/* Krug 5 */],
+  [/* Krug 6 */]
+];
+
+function calcPoints(choice, correct) {
+  if(choice.endsWith('!')) return choice[0]===correct ? 100 : -100;
+  if(choice.endsWith('.')) return choice[0]===correct ? 50 : 0;
+  if(choice.endsWith('?')) return choice[0]===correct ? 50 : -50;
+  return 0;
+}
+
+setTimeout(()=>{
+  document.getElementById("timer").innerText = "Kviz počinje!";
+  document.getElementById("questionPhase").classList.remove("hidden");
+  startQuestion(currentRound,currentQuestionIndex);
+}, quizStartTime - Date.now());
+
+function startQuestion(round,index){
+  if(round>=rounds) return;
+  const question = allQuestions[round][index];
+  document.getElementById("questionText").innerText = question.text;
+  document.getElementById("roundInfo").innerText = `Krug ${round+1}, Pitanje ${index+1}`;
+  const buttonsDiv = document.getElementById("answerButtons");
+  buttonsDiv.innerHTML='';
+  ['A','B','C','D'].forEach(opt=>{
+    ['.','!','?'].forEach(suffix=>{
+      const btn=document.createElement('button');
+      btn.innerText = opt+suffix;
+      btn.onclick=()=>submitAnswer(opt+suffix,question.correct);
+      buttonsDiv.appendChild(btn);
+    });
+  });
+  startTimer(round,index);
+}
+
+function startTimer(round,index){
+  let time=20;
+  timerInterval=setInterval(()=>{
+    document.getElementById("timer").innerText=`Vrijeme: ${time}s`;
+    time--;
+    if(time<0){
+      clearInterval(timerInterval);
+      autoFail(round,index);
+    }
+  },1000);
+}
+
+function submitAnswer(choice,correct){
+  clearInterval(timerInterval);
+  const points=calcPoints(choice,correct);
+  const elapsed=20-(parseInt(document.getElementById("timer").innerText.match(/\d+/))||0);
+  db.ref(`results/${player}`).once('value',snap=>{
+    let data=snap.val()||{points:0,exclam:0,questionMarks:0,timeUsed:0};
+    if(choice.endsWith('!')) data.exclam++;
+    if(choice.endsWith('?')) data.questionMarks++;
+    data.points+=points;
+    data.timeUsed+=elapsed;
+    db.ref(`results/${player}`).set(data);
+    showNext(currentRound,currentQuestionIndex+1);
+  });
+}
+
+function autoFail(round,index){
+  submitAnswer('?','');
+}
+
+function showNext(round,nextIndex){
+  if(nextIndex>=questionsPerRound){
+    currentRound++; currentQuestionIndex=0;
+    setTimeout(()=>{ if(currentRound<rounds) startQuestion(currentRound,0); },40000);
+  }else{
+    currentQuestionIndex=nextIndex;
+    startQuestion(round,nextIndex);
+  }
+  updateLeaderboard();
+}
+
+function updateLeaderboard(){
+  db.ref('results').once('value',snap=>{
+    const tbody=document.querySelector('#leaderboard tbody');
+    tbody.innerHTML='';
+    const players=[];
+    snap.forEach(ch=>players.push({name:ch.key,...ch.val()}));
+    players.sort((a,b)=>{
+      if(b.points!==a.points) return b.points-a.points;
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
+      return a.timeUsed-b.timeUsed;
+    });
+    players.forEach(p=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${p.name}</td><td>${p.points}</td><td>${p.exclam}</td><td>${p.questionMarks}</td><td>${p.timeUsed}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+</script>
+</body>
+</html>
