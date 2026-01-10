@@ -7,7 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:6px; padding:12px 18px; font-size:20px; cursor:pointer; display:block; width:100px; margin-left:auto; margin-right:auto; }
+button { margin:6px; padding:12px 18px; font-size:20px; cursor:pointer; display:block; width:120px; margin-left:auto; margin-right:auto; }
 .hidden { display:none; }
 .timer { font-size:36px; margin:10px; }
 table { margin:auto; border-collapse: collapse; width: 80%; }
@@ -49,30 +49,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 🔥 POSTAVI VRIJEME POČETKA KVIZA (danas 15:10)
-const quizStartDate = new Date();
-quizStartDate.setHours(15,24,0,0);
-const quizStartTime = quizStartDate.getTime();
+// 🔥 Fiksni datum i vrijeme početka kviza
+const quizStartTime = new Date('2026-01-10T15:30:00+01:00').getTime();
 
 const rounds = 6;
 const questionsPerRound = 10;
 let currentRound = 0;
 let currentQuestionIndex = 0;
-let timerInterval;
+let questionTimer;
+let questionDuration = 20; // sekunde za regularni odgovor
 
-// 🔥 6 KRUGOVA × 10 PITANJA
 const allQuestions = [
   [
     { text:"Koliko je 2 + 2?", correct:"C", options:["1","2","4","3"] },
-    { text:"Koja boja je nebo?", correct:"A", options:["Plava","Zelena","Crvena","Žuta"] },
-    { text:"Koji planet je najbliži Suncu?", correct:"B", options:["Venera","Merkur","Mars","Jupiter"] },
-    { text:"Koji dan dolazi nakon ponedjeljka?", correct:"D", options:["Petak","Nedjelja","Srijeda","Utorak"] },
-    { text:"Koja životinja mjauče?", correct:"C", options:["Pas","Krava","Mačka","Ovca"] },
-    { text:"Koja je suprotnost riječi 'vruće'?", correct:"A", options:["Hladno","Toplo","Vlažno","Suho"] },
-    { text:"Koliko sati ima jedan dan?", correct:"B", options:["12","24","36","48"] },
-    { text:"Koja boja nastaje miješanjem plave i žute?", correct:"D", options:["Crvena","Zelena","Ljubičasta","Zelena"] },
-    { text:"Koji broj dolazi nakon 9?", correct:"C", options:["7","8","10","11"] },
-    { text:"Koja životinja ima dugi vrat?", correct:"B", options:["Slon","Žirafa","Konj","Lav"] }
+    { text:"Koja boja je nebo?", correct:"A", options:["Plava","Zelena","Crvena","Žuta"] }
   ],
   [ /* Krug 2 */ ],
   [ /* Krug 3 */ ],
@@ -94,7 +84,7 @@ function startQuiz(){
   startQuestion(currentRound,currentQuestionIndex);
 }
 
-// 🔥 START KVIZA S PROVJEROM
+// 🔥 Start kviza s provjerom
 const now = Date.now();
 if (quizStartTime > now) {
   setTimeout(startQuiz, quizStartTime - now);
@@ -117,53 +107,55 @@ function startQuestion(round,index){
     ['.','!','?'].forEach(suffix=>{
       const btn=document.createElement('button');
       btn.innerText = opt+suffix;
-      btn.onclick=()=>submitAnswer(opt+suffix,question.correct);
+      btn.onclick=()=>submitAnswer(opt+suffix);
       buttonsDiv.appendChild(btn);
     });
   });
 
-  startTimer(round,index);
-}
-
-function startTimer(round,index){
-  let time=20;
-  timerInterval=setInterval(()=>{
-    document.getElementById("timer").innerText=`Vrijeme: ${time}s`;
-    time--;
-    if(time<0){
-      clearInterval(timerInterval);
-      autoFail(round,index);
+  // Pokreni timer za pitanje
+  let timeLeft = questionDuration;
+  questionTimer = setInterval(()=>{
+    document.getElementById("timer").innerText=`Vrijeme: ${timeLeft}s`;
+    timeLeft--;
+    if(timeLeft<0){
+      clearInterval(questionTimer);
+      processQuestionAnswers(round,index);
     }
   },1000);
 }
 
-function submitAnswer(choice,correct){
-  // Ne zaustavljamo timer da svi imaju puni vremenski prozor
-  const points=calcPoints(choice,correct);
-  const elapsed=20-(parseInt(document.getElementById("timer").innerText.match(/\d+/))||0);
-  db.ref(`results/${player}`).once('value',snap=>{
-    let data=snap.val()||{points:0,exclam:0,questionMarks:0,timeUsed:0};
-    if(choice.endsWith('!')) data.exclam++;
-    if(choice.endsWith('?')) data.questionMarks++;
-    data.points+=points;
-    data.timeUsed+=elapsed;
-    db.ref(`results/${player}`).set(data);
+function submitAnswer(choice){
+  // Ne zaustavljamo timer, samo spremamo odgovor u Firebase
+  db.ref(`answers/${currentRound}/${currentQuestionIndex}/${player}`).set({choice, timestamp: Date.now()});
+}
+
+function processQuestionAnswers(round,index){
+  // Prikaži bodove nakon isteka vremena
+  db.ref(`answers/${round}/${index}`).once('value',snap=>{
+    const allAnswers = snap.val() || {};
+    for(const p in allAnswers){
+      const choice = allAnswers[p].choice;
+      const correct = allQuestions[round][index].correct;
+      const points = calcPoints(choice,correct);
+      db.ref(`results/${p}`).once('value',rsnap=>{
+        let data = rsnap.val() || {points:0,exclam:0,questionMarks:0,timeUsed:0};
+        if(choice.endsWith('!')) data.exclam++;
+        if(choice.endsWith('?')) data.questionMarks++;
+        data.points += points;
+        db.ref(`results/${p}`).set(data);
+        updateLeaderboard();
+      });
+    }
   });
-}
 
-function autoFail(round,index){
-  submitAnswer('?','');
-}
-
-function showNext(round,nextIndex){
-  if(nextIndex>=questionsPerRound){
-    currentRound++; currentQuestionIndex=0;
-    setTimeout(()=>{ if(currentRound<rounds) startQuestion(currentRound,0); },40000);
-  }else{
-    currentQuestionIndex=nextIndex;
-    startQuestion(round,nextIndex);
-  }
-  updateLeaderboard();
+  // Odlazak na sljedeće pitanje nakon 40 sekundi prikaza
+  setTimeout(()=>{
+    currentQuestionIndex++;
+    if(currentQuestionIndex>=questionsPerRound){
+      currentRound++; currentQuestionIndex=0;
+    }
+    if(currentRound<rounds) startQuestion(currentRound,currentQuestionIndex);
+  },40000);
 }
 
 function updateLeaderboard(){
@@ -175,7 +167,7 @@ function updateLeaderboard(){
     players.sort((a,b)=>{
       if(b.points!==a.points) return b.points-a.points;
       if(a.exclam!==b.exclam) return a.exclam-b.exclam;
-      return a.timeUsed-b.timeUsed;
+      return 0;
     });
     players.forEach(p=>{
       const tr=document.createElement('tr');
