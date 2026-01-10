@@ -49,8 +49,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 🔥 Fiksni datum i vrijeme početka kviza
-const quizStartTime = new Date('2026-01-10T15:10:00+01:00').getTime();
+// 🔥 Fiksni datum i vrijeme početka kviza u CET (Hrvatska)
+// 10.01.2026 u 15:35 CET → 14:35 UTC
+const quizStartTime = Date.UTC(2026, 0, 10, 14, 35, 0);
 
 const rounds = 6;
 const questionsPerRound = 10;
@@ -84,10 +85,23 @@ function startQuiz(){
   startQuestion(currentRound,currentQuestionIndex);
 }
 
-// 🔥 Start kviza s provjerom
+// 🔥 Start kviza s countdown display
+function startCountdownDisplay(countdown){
+  let timeLeft = Math.floor(countdown / 1000);
+  const timerDiv = document.getElementById("timer");
+  const interval = setInterval(()=>{
+    timerDiv.innerText = `Kviz počinje za ${timeLeft}s`;
+    timeLeft--;
+    if(timeLeft<0){
+      clearInterval(interval);
+      startQuiz();
+    }
+  },1000);
+}
+
 const now = Date.now();
-if (quizStartTime > now) {
-  setTimeout(startQuiz, quizStartTime - now);
+if(quizStartTime > now){
+  startCountdownDisplay(quizStartTime - now);
 } else {
   document.getElementById("timer").innerText = "Čekanje sljedećeg kviza...";
 }
@@ -97,8 +111,6 @@ function startQuestion(round,index){
   const question = allQuestions[round][index];
   document.getElementById("questionText").innerText = question.text;
   document.getElementById("roundInfo").innerText = `Krug ${round+1}, Pitanje ${index+1}`;
-
-  // Prikaz ponuđenih odgovora
   document.getElementById("optionsText").innerHTML = question.options.map((opt,i)=>`${String.fromCharCode(65+i)}: ${opt}`).join('<br>');
 
   const buttonsDiv = document.getElementById("answerButtons");
@@ -112,7 +124,6 @@ function startQuestion(round,index){
     });
   });
 
-  // Pokreni timer za pitanje
   let timeLeft = questionDuration;
   questionTimer = setInterval(()=>{
     document.getElementById("timer").innerText=`Vrijeme: ${timeLeft}s`;
@@ -125,12 +136,10 @@ function startQuestion(round,index){
 }
 
 function submitAnswer(choice){
-  // Ne zaustavljamo timer, samo spremamo odgovor u Firebase
   db.ref(`answers/${currentRound}/${currentQuestionIndex}/${player}`).set({choice, timestamp: Date.now()});
 }
 
 function processQuestionAnswers(round,index){
-  // Prikaži bodove nakon isteka vremena
   db.ref(`answers/${round}/${index}`).once('value',snap=>{
     const allAnswers = snap.val() || {};
     for(const p in allAnswers){
@@ -147,8 +156,6 @@ function processQuestionAnswers(round,index){
       });
     }
   });
-
-  // Odlazak na sljedeće pitanje nakon 40 sekundi prikaza
   setTimeout(()=>{
     currentQuestionIndex++;
     if(currentQuestionIndex>=questionsPerRound){
