@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8" />
+<title>Kviz – Igrači</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+body { font-family: Arial; background:#111; color:white; text-align:center; }
+button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; width:140px; }
+#answers { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; max-width:320px; margin:auto; }
+.timer { font-size:48px; margin:20px; color:yellow; }
+.locked button { opacity:0.5; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<h2>Kviz</h2>
+<div id="status">Čekanje admina…</div>
+<div class="timer" id="timer">--</div>
+
+<div id="question" style="font-size:26px;margin:20px"></div>
+<div id="answers"></div>
+<div id="waiting"></div>
+
+<script>
+const player = localStorage.getItem("player") || prompt("Ime igrača");
+localStorage.setItem("player", player);
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef",
+  storageBucket: "hpddd-b9bef.appspot.com",
+  messagingSenderId: "520105963434",
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// registriraj igrača
+db.ref(`players/${player}`).set(true);
+
+let currentPhase = "lobby";
+let answered = false;
+
+function renderAnswers() {
+  const div = document.getElementById("answers");
+  div.innerHTML = "";
+  ['A','B','C','D'].forEach(l=>{
+    ['!','.','?'].forEach(s=>{
+      const b=document.createElement('button');
+      b.innerText=l+s;
+      b.onclick=()=>submit(l+s);
+      div.appendChild(b);
+    });
+  });
+}
+
+function submit(choice){
+  if(answered) return;
+  answered=true;
+  db.ref(`answers/${player}`).set({choice,time:Date.now()});
+  document.getElementById("answers").classList.add("locked");
+}
+
+// slušaj stanje igre
+db.ref('game').on('value',snap=>{
+  const g=snap.val();
+  if(!g) return;
+  currentPhase=g.phase;
+  document.getElementById("status").innerText = g.status;
+
+  if(g.phase==='main' || g.phase==='questionMark'){
+    document.getElementById("question").innerText=g.questionText;
+    renderAnswers();
+    answered=false;
+    document.getElementById("answers").classList.remove("locked");
+  }
+
+  if(g.phase==='reveal'){
+    document.getElementById("answers").innerHTML="Točan odgovor: "+g.correct;
+  }
+
+  if(g.phaseEndsAt){
+    const tick=()=>{
+      const left=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
+      document.getElementById("timer").innerText=left+'s';
+    };
+    tick();
+    setInterval(tick,1000);
+  }
+});
+</script>
+</body>
+</html>
