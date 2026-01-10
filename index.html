@@ -50,8 +50,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // 🔥 Fiksni datum i vrijeme početka kviza u CET (Hrvatska)
-// 10.01.2026 u 15:35 CET → 14:35 UTC
-const quizStartTime = Date.UTC(2026, 0, 10, 14, 35, 0);
+// 10.01.2026 u 15:40 CET → 14:40 UTC
+const quizStartTime = Date.UTC(2026, 0, 10, 14, 40, 0);
 
 const rounds = 6;
 const questionsPerRound = 10;
@@ -85,26 +85,27 @@ function startQuiz(){
   startQuestion(currentRound,currentQuestionIndex);
 }
 
-// 🔥 Start kviza s countdown display
-function startCountdownDisplay(countdown){
-  let timeLeft = Math.floor(countdown / 1000);
-  const timerDiv = document.getElementById("timer");
-  const interval = setInterval(()=>{
-    timerDiv.innerText = `Kviz počinje za ${timeLeft}s`;
-    timeLeft--;
-    if(timeLeft<0){
-      clearInterval(interval);
-      startQuiz();
-    }
-  },1000);
-}
+// 🔥 Start kviza s countdown display koristeći server time offset
+db.ref('.info/serverTimeOffset').once('value').then(offsetSnap => {
+  const offset = offsetSnap.val() || 0;
+  const serverNow = Date.now() + offset;
+  const countdownMs = quizStartTime - serverNow;
 
-const now = Date.now();
-if(quizStartTime > now){
-  startCountdownDisplay(quizStartTime - now);
-} else {
-  document.getElementById("timer").innerText = "Čekanje sljedećeg kviza...";
-}
+  if(countdownMs > 0){
+      let timeLeft = Math.floor(countdownMs / 1000);
+      const timerDiv = document.getElementById("timer");
+      const interval = setInterval(()=>{
+          timerDiv.innerText = `Kviz počinje za ${timeLeft}s`;
+          timeLeft--;
+          if(timeLeft<0){
+              clearInterval(interval);
+              startQuiz();
+          }
+      },1000);
+  } else {
+      startQuiz();
+  }
+});
 
 function startQuestion(round,index){
   if(round>=rounds) return;
