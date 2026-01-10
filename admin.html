@@ -7,55 +7,42 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { margin:8px; padding:14px 22px; font-size:22px; cursor:pointer; }
-#players, #answersTable { margin:20px auto; width:90%; border-collapse:collapse; }
-#players th, #players td, #answersTable th, #answersTable td { border:1px solid white; padding:6px; text-align:center; }
+button { margin:5px; padding:10px 16px; font-size:18px; cursor:pointer; }
+#phaseControl { margin:20px; }
+#leaderboard, #answersTable { margin:20px auto; border-collapse:collapse; width:80%; }
+#leaderboard th, #leaderboard td, #answersTable th, #answersTable td { border:1px solid white; padding:6px; text-align:center; }
 th { background:#222; }
-#controls { display:none; margin-top:20px; }
-#answersTable { max-height:300px; overflow-y:scroll; display:block; }
+#timer { font-size:48px; margin:20px; color:yellow; }
 </style>
 </head>
 <body>
 
-<h2>Admin – Kviz</h2>
+<h2>Admin – Kviz kontrola</h2>
+<div id="timer">--</div>
 
-<div id="loginDiv">
-  <input type="password" id="adminkey" placeholder="Admin ključ" />
-  <button onclick="login()">Login</button>
+<div id="phaseControl">
+  <button onclick="startQuiz()">Start kviza</button>
+  <button onclick="pauseQuiz()">Pauza</button>
+  <button onclick="resumeQuiz()">Nastavi</button>
 </div>
 
-<div id="controls">
-  <button onclick="startGame()">▶ Start kviza</button>
-  <button onclick="pauseGame()">⏸ Pauza</button>
-  <button onclick="resumeGame()">▶ Nastavi</button>
-  <button onclick="nextQuestion()">➡ Sljedeće pitanje</button>
-  <button onclick="eliminate()">❌ Eliminiraj zadnjeg</button>
-</div>
-
-<h3>Prijavljeni igrači</h3>
-<table id="players">
-<thead><tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th></tr></thead>
-<tbody></tbody>
-</table>
-
-<h3>Detaljan pregled odgovora</h3>
+<h3>Trenutna pitanja i odgovori</h3>
 <table id="answersTable">
-  <thead>
-    <tr>
-      <th>Krug</th>
-      <th>Pitanje</th>
-      <th>Igrač</th>
-      <th>Odgovor</th>
-      <th>Bodovi</th>
-      <th>Vrijeme (s)</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Igrač</th><th>Odgovor</th><th>Vrijeme</th></tr></thead>
   <tbody></tbody>
 </table>
 
+<h3>Leaderboard</h3>
+<table id="leaderboard">
+  <thead><tr><th>Igrač</th><th>Bodovi</th><th>!</th><th>?</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h3>Vizualni leaderboard</h3>
+<div id="vizLeaderboard"></div>
+
 <script>
-const ADMIN_KEY="tajni123";
-const firebaseConfig={
+const firebaseConfig = {
   apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain:"hpddd-b9bef.firebaseapp.com",
   databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
@@ -65,129 +52,155 @@ const firebaseConfig={
   appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"
 };
 firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
-let paused=false;
+const db = firebase.database();
 
-// LOGIN
-function login(){
-  const key=document.getElementById("adminkey").value;
-  if(key===ADMIN_KEY){
-    document.getElementById("controls").style.display="block";
-    document.getElementById("loginDiv").style.display="none";
-    updatePlayers();
-    updateAnswerDetails();
-  } else alert("Krivi ključ");
+// ========== ADMIN LOZINKA ==========
+const adminPassword = "kvizAdmin123";
+const entered = prompt("Unesite admin lozinku:");
+if(entered!==adminPassword){ alert("Neautorizirano!"); throw "Access denied"; }
+
+// ========== KVIZ KONFIGURACIJA ==========
+let currentRound = 1, currentQ = 1, phase='paused';
+let phaseTimer=null;
+
+const rounds = 6;
+const questionsPerRound = 10;
+const baseValues = [10,20,30,40,50,100]; // vrijednosti po krugovima
+
+const questions = [];
+for(let r=1;r<=rounds;r++){
+  for(let q=1;q<=questionsPerRound;q++){
+    questions.push({
+      round:r,
+      qnum:q,
+      text:`Pitanje ${q} iz kruga ${r}?`,
+      correct:'A',
+      values:{'!': baseValues[r-1], '.': baseValues[r-1]/2, '?': baseValues[r-1]/2},
+      choices:['A','B','C','D']
+    });
+  }
 }
 
-// START KVIZA
-function startGame(){
-  const now=Date.now();
+// ========== POKRETANJE FAZA ==========
+function startQuiz(){ startRound(1,1); }
+
+function pauseQuiz(){ phase='paused'; db.ref('game').update({phase:'paused'});}
+function resumeQuiz(){ phase='main'; db.ref('game').update({phase:'main'}); }
+
+function startRound(r,q){
+  currentRound=r; currentQ=q;
+  const idx=(r-1)*questionsPerRound+(q-1);
+  if(!questions[idx]) { alert("Kviz završen!"); return; }
+  const qobj=questions[idx];
+  startPhase(qobj,'main',20000); // 20s main
+}
+
+function startPhase(qobj,phaseName,duration){
+  phase=phaseName;
+  const phaseEndsAt=Date.now()+duration;
   db.ref('game').set({
-    round:1, question:1, phase:'main', phaseEndsAt:now+20000,
-    questionText:"Pitanje 1 krug 1",
-    correct:"A",
-    choices:['A','B','C','D'],
-    values:{'!':10,'.':5,'?':5, wrong:{'!':-10,'.':0,'?':-5}}
+    phase:phaseName,
+    round:qobj.round,
+    question:qobj.qnum,
+    questionText:qobj.text,
+    correct:qobj.correct,
+    values:qobj.values,
+    choices:qobj.choices,
+    phaseEndsAt:phaseEndsAt
   });
-}
 
-// PAUZA
-function pauseGame(){
-  paused=true;
-  db.ref('game').once('value').then(snap=>{
-    const g = snap.val();
-    db.ref('game').update({phase:'paused', phasePrev: g.phase});
-  });
-}
-
-// NASTAVI
-function resumeGame(){
-  paused=false;
-  db.ref('game').once('value').then(snap=>{
-    const g = snap.val();
-    if(!g) return;
-    const now=Date.now();
-    const remaining=g.phaseEndsAt-now;
-    db.ref('game').update({phase:g.phasePrev||'main', phaseEndsAt:now+remaining});
-  });
-}
-
-// SLJEDEĆE PITANJE
-function nextQuestion(){
-  db.ref('game').once('value').then(snap=>{
-    const g=snap.val()||{round:1,question:0};
-    const valMap = {'!':g.round*10,'.':g.round*5,'?':g.round*5, wrong:{'!':-g.round*10,'.':0,'?':-g.round*5}};
-    const next={round:g.round, question:g.question+1, phase:'main', phaseEndsAt:Date.now()+20000,
-                questionText:`Pitanje ${g.question+1} krug ${g.round}`,
-                correct:['A','B','C','D'][Math.floor(Math.random()*4)],
-                choices:['A','B','C','D'], values:valMap};
-    db.ref('game').set(next);
-  });
-}
-
-// ELIMINACIJA
-function eliminate(){
-  db.ref('results').once('value').then(snap=>{
-    const players=[];
-    snap.forEach(ch=>{
-      const r=ch.val(); 
-      players.push({name:ch.key,points:r.points||0,question:r.question||0,exclam:r.exclam||0,time:r.time||0});
-    });
-    if(players.length<=1){ alert("Ne može eliminirati – ostao je jedan igrač"); return; }
-    players.sort((a,b)=>{
-      if(a.points!==b.points) return a.points-b.points;
-      if(a.question!==b.question) return a.question-b.question;
-      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
-      return b.time-a.time;
-    });
-    const eliminated=players[0];
-    if(confirm(`Eliminirati ${eliminated.name}?`)){
-      db.ref(`players/${eliminated.name}`).remove();
-      db.ref(`eliminated/${eliminated.name}`).set({ at: Date.now() });
-      alert(`${eliminated.name} eliminiran`);
+  clearTimeout(phaseTimer);
+  phaseTimer=setTimeout(()=>{
+    if(phaseName==='main') startPhase(qobj,'questionMark',10000);
+    else if(phaseName==='questionMark') startPhase(qobj,'reveal',10000);
+    else if(phaseName==='reveal') startPhase(qobj,'leaderboard',40000);
+    else if(phaseName==='leaderboard'){
+      currentQ++; if(currentQ>questionsPerRound){currentRound++; currentQ=1;}
+      startRound(currentRound,currentQ);
     }
-  });
+  },duration);
 }
 
-// LEADERBOARD
-function updatePlayers(){
-  db.ref('results').on('value',snap=>{
-    const tbody=document.querySelector('#players tbody'); tbody.innerHTML="";
+// ========== PRIKAZ ODGOVORA ==========
+function updateAnswersTable(){
+  const idx=(currentRound-1)*questionsPerRound+(currentQ-1);
+  const qid=`${questions[idx].round}_${questions[idx].qnum}`;
+  db.ref(`answers/${qid}`).once('value').then(snap=>{
+    const tbody=document.querySelector('#answersTable tbody'); tbody.innerHTML="";
     snap.forEach(ch=>{
-      const r=ch.val(); 
+      const val=ch.val();
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${ch.key}</td><td>${r.points||0}</td><td>${r.exclam||0}</td><td>${r.question||0}</td>`;
+      tr.innerHTML=`<td>${ch.key}</td><td>${val.choice}</td><td>${new Date(val.time).toLocaleTimeString()}</td>`;
       tbody.appendChild(tr);
     });
   });
 }
 
-// DETALJAN PREGLED ODGOVORA
-function updateAnswerDetails(){
-  const tbody = document.querySelector('#answersTable tbody');
-  db.ref('answers').on('value', snap=>{
+// ========== LEADERBOARD + ELIMINACIJA ==========
+function updateLeaderboard(){
+  db.ref('results').once('value').then(snap=>{
+    const tbody=document.querySelector('#leaderboard tbody'); tbody.innerHTML="";
+    const players=[];
+    snap.forEach(ch=>{
+      const r=ch.val();
+      players.push({name:ch.key,...r});
+    });
+    // tiebreak logika: prvo ?, onda !, onda vrijeme
+    players.sort((a,b)=>{
+      if(a.points!==b.points) return b.points-a.points;
+      if(a.question!==b.question) return a.question-b.question; 
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam; 
+      return a.time-b.time; 
+    });
+    // prikaz i automatsko izbacivanje (najniži)
     tbody.innerHTML="";
-    snap.forEach(roundSnap=>{
-      roundSnap.forEach(qSnap=>{
-        const qKey = qSnap.key;
-        qSnap.forEach(playerSnap=>{
-          const data = playerSnap.val();
-          db.ref(`results/${playerSnap.key}`).once('value').then(resSnap=>{
-            const points = resSnap.val()?.points || 0;
-            const tr=document.createElement('tr');
-            tr.innerHTML=`<td>${roundSnap.key}</td>
-                          <td>${qKey}</td>
-                          <td>${playerSnap.key}</td>
-                          <td>${data.choice}</td>
-                          <td>${points}</td>
-                          <td>${Math.floor((data.time || 0)/1000)}</td>`;
-            tbody.appendChild(tr);
-          });
-        });
-      });
+    players.forEach((p,i)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${p.name}</td><td>${p.points||0}</td><td>${p.exclam||0}</td><td>${p.question||0}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(players.length>1){
+      const eliminated = players[players.length-1];
+      db.ref(`players/${eliminated.name}`).remove();
+    }
+  });
+}
+
+// ========== VIZUALNI LEADERBOARD ==========
+function updateVizLeaderboard(){
+  db.ref('results').once('value').then(snap=>{
+    const players=[];
+    snap.forEach(ch=>{
+      const r = ch.val();
+      players.push({name: ch.key, points: r.points||0, exclam:r.exclam||0, question:r.question||0, time:r.time||0});
+    });
+    players.sort((a,b)=>{
+      if(a.points!==b.points) return b.points-a.points;
+      if(a.question!==b.question) return a.question-b.question;
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
+      return a.time-b.time;
+    });
+    const div=document.getElementById("vizLeaderboard"); div.innerHTML="";
+    players.forEach((p,i)=>{
+      const line=document.createElement("div"); line.style.padding="4px"; line.style.borderBottom="1px solid #444";
+      line.innerHTML=`${i+1}. ${p.name} – ${p.points} € | !:${p.exclam} ?:${p.question} | ${Math.floor(p.time/1000)}s`;
+      div.appendChild(line);
     });
   });
 }
+
+setInterval(()=>{updateAnswersTable(); updateLeaderboard(); updateVizLeaderboard();},1000);
+
+// ========== TIMER ==========
+setInterval(()=>{
+  db.ref('game/phaseEndsAt').once('value').then(snap=>{
+    const t=snap.val();
+    if(!t) return;
+    const left=Math.max(0,Math.ceil((t-Date.now())/1000));
+    document.getElementById('timer').innerText = left+'s';
+  });
+},500);
+
 </script>
 </body>
 </html>
