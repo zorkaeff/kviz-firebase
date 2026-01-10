@@ -54,20 +54,18 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-
 db.ref(`players/${player}`).set({ joined: Date.now() });
 
 let answered = false;
 let currentQuestion = null;
 
-// ============ ODGOVORI =============
+// ================= ODGOVORI =================
 function renderAnswers(choices=['A','B','C','D']){
   const div=document.getElementById("answers"); div.innerHTML="";
   choices.forEach(l=>['!','.','?'].forEach(m=>{
     const b=document.createElement('button'); b.innerText=l+m; b.onclick=()=>submit(l+m); div.appendChild(b);
   }));
 }
-
 function submit(choice){
   if(answered) return;
   answered=true;
@@ -122,7 +120,7 @@ function showReveal(g){
     snap.forEach(ch=>{
       const {choice}=ch.val();
       const letter=choice[0], mod=choice[1], correct=letter===g.correct;
-      const delta = correct ? g.values[mod] : g.values.wrong[mod];
+      const delta = correct ? g.values[mod] : g.values.wrong?.[mod] || -g.values[mod];
 
       db.ref(`results/${ch.key}`).transaction(r=>{
         if(!r) r={points:0,exclam:0,question:0,time:0};
@@ -136,17 +134,30 @@ function showReveal(g){
 }
 
 // ================= LEADERBOARD =================
-db.ref('results').on('value',snap=>{
-  const tbody=document.querySelector('#leaderboard tbody'); tbody.innerHTML="";
-  snap.forEach(ch=>{
-    const r=ch.val(); 
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${ch.key}</td><td>${r.points||0}</td><td>${r.exclam||0}</td><td>${r.question||0}</td>`;
-    tbody.appendChild(tr);
+function updateLeaderboard(){
+  db.ref('results').once('value').then(snap=>{
+    const tbody=document.querySelector('#leaderboard tbody'); tbody.innerHTML="";
+    const players=[];
+    snap.forEach(ch=>{
+      const r=ch.val(); players.push({name:ch.key,...r});
+    });
+    // Tiebreak logika
+    players.sort((a,b)=>{
+      if(a.points!==b.points) return b.points-a.points;
+      if(a.question!==b.question) return a.question-b.question; // manje ? bolje
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam;         // manje ! bolje
+      return a.time-b.time;                                     // manje vremena bolje
+    });
+    players.forEach(p=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${p.name}</td><td>${p.points||0}</td><td>${p.exclam||0}</td><td>${p.question||0}</td>`;
+      tbody.appendChild(tr);
+    });
   });
-});
+}
+setInterval(updateLeaderboard,2000);
 
-// ================ VIZUALNI LEADERBOARD =================
+// ================= VIZUALNI LEADERBOARD =================
 function updateVizLeaderboard(){
   db.ref('results').once('value').then(snap=>{
     const players=[];
@@ -160,11 +171,11 @@ function updateVizLeaderboard(){
         time: r.time||0
       });
     });
-    // Sortiranje prema pravilima
+    // Sortiranje prema tiebreak
     players.sort((a,b)=>{
       if(a.points!==b.points) return b.points-a.points;
-      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
       if(a.question!==b.question) return a.question-b.question;
+      if(a.exclam!==b.exclam) return a.exclam-b.exclam;
       return a.time-b.time;
     });
     const div = document.getElementById("vizLeaderboard");
