@@ -1,0 +1,60 @@
+{
+  "rounds": {
+    "1": {
+      "value": 10,
+      "questions": [
+        {
+          "id": "1-1",
+          "text": "Koji je glavni grad Hrvatske?",
+          "answers": {
+            "A": "Split",
+            "B": "Rijeka",
+            "C": "Zagreb",
+            "D": "Osijek"
+          },
+          "correct": "C",
+          "category": "Geografija",
+          "difficulty": "Lako",
+          "used": false,
+          "usedAt": null
+        },
+        {
+          "id": "1-2",
+          "text": "Koliko dana ima prijestupna godina?",
+          "answers": {
+            "A": "364",
+            "B": "365",
+            "C": "366",
+            "D": "367"
+          },
+          "correct": "C",
+          "category": "Opće znanje",
+          "difficulty": "Lako",
+          "used": false,
+          "usedAt": null
+        }
+      ]
+    },
+
+    "2": {
+      "value": 20,
+      "questions": [
+        {
+          "id": "2-1",
+          "text": "Koji planet je poznat kao Crveni planet?",
+          "answers": {
+            "A": "Venera",
+            "B": "Mars",
+            "C": "Jupiter",
+            "D": "Saturn"
+          },
+          "correct": "B",
+          "category": "Svemir",
+          "difficulty": "Lako",
+          "used": false,
+          "usedAt": null
+        }
+      ]
+    }
+  }
+}
