@@ -1,192 +1,103 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8">
-<title>Kviz – ADMIN</title>
-
+<meta charset="UTF-8" />
+<title>Kviz – Admin</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
 <style>
-body { font-family: Arial; background:#111; color:#fff; padding:20px; }
-select, button { font-size:16px; padding:8px; margin:5px; }
-button { cursor:pointer; }
-.panel { border:1px solid #444; padding:15px; margin-bottom:20px; }
-h2,h3 { margin-top:0; }
-.answer { margin-left:15px; }
-.used { color:#888; }
-table { width:100%; border-collapse:collapse; }
-td,th { border:1px solid #444; padding:6px; text-align:center; }
+body{font-family:Arial;background:#111;color:#fff;padding:20px}
+button{padding:10px 16px;margin:6px;font-size:16px;cursor:pointer}
+select{padding:8px;font-size:16px}
+table{border-collapse:collapse;width:100%;margin-top:20px}
+th,td{border:1px solid #555;padding:6px;text-align:center}
+.pause{background:#c0392b}
+.start{background:#27ae60}
 </style>
 </head>
 <body>
+<h2>ADMIN PANEL</h2>
 
-<h2>🎛 ADMIN – KVIZ</h2>
-
-<div class="panel">
-  <h3>1️⃣ Odabir pitanja</h3>
-  Krug:
-  <select id="roundSelect"></select>
-
-  Pitanje:
-  <select id="questionSelect"></select>
+<div>
+  <button class="start" onclick="startGame()">▶ Start</button>
+  <button class="pause" onclick="pauseGame()">⏸ Pause</button>
+  <button onclick="nextPhase()">⏭ Next phase</button>
+  <button onclick="eliminateLast()">❌ Eliminate last</button>
 </div>
 
-<div class="panel">
-  <h3>2️⃣ Pregled pitanja</h3>
-  <div id="questionPreview">—</div>
-</div>
+<h3>Odabir pitanja</h3>
+<select id="roundSelect"></select>
+<select id="questionSelect"></select>
+<button onclick="loadQuestion()">Učitaj pitanje</button>
 
-<div class="panel">
-  <h3>3️⃣ Kontrola igre</h3>
-  <button onclick="startQuestion()">▶ START</button>
-  <button onclick="pauseGame()">⏸ PAUSE</button>
-  <button onclick="revealAnswer()">👁 REVEAL</button>
-  <button onclick="nextQuestion()">➡ NEXT</button>
-</div>
+<h3>Live stanje</h3>
+<div id="state"></div>
 
-<div class="panel">
-  <h3>4️⃣ Live odgovori</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Igrač</th>
-        <th>Odgovor</th>
-        <th>Vrijeme</th>
-      </tr>
-    </thead>
-    <tbody id="liveAnswers"></tbody>
-  </table>
-</div>
+<h3>Odgovori</h3>
+<table id="answers"><thead><tr><th>Igrač</th><th>Odgovor</th><th>Vrijeme</th></tr></thead><tbody></tbody></table>
+
+<h3>Leaderboard</h3>
+<table id="leader"><thead><tr><th>#</th><th>Igrač</th><th>€</th><th>?</th><th>!</th><th>⏱</th></tr></thead><tbody></tbody></table>
 
 <script>
-// ===== FIREBASE =====
-const firebaseConfig = {
-  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
-};
+const firebaseConfig={apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",authDomain:"hpddd-b9bef.firebaseapp.com",databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",projectId:"hpddd-b9bef",storageBucket:"hpddd-b9bef.appspot.com",messagingSenderId:"520105963434",appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"};
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const db=firebase.database();
 
-// ===== STATE =====
-let questionsData = {};
-let currentRound = null;
-let currentQuestionIndex = null;
-
-// ===== LOAD QUESTIONS =====
-db.ref("questions/rounds").once("value", snap => {
-  questionsData = snap.val();
-  const roundSelect = document.getElementById("roundSelect");
-  roundSelect.innerHTML = "";
-
-  Object.keys(questionsData).forEach(r => {
-    const opt = document.createElement("option");
-    opt.value = r;
-    opt.innerText = `Krug ${r} (€${questionsData[r].value})`;
-    roundSelect.appendChild(opt);
+// populate rounds
+db.ref('rounds').once('value',snap=>{
+  const rs=document.getElementById('roundSelect');
+  snap.forEach(r=>{
+    const o=document.createElement('option');o.value=r.key;o.text='Krug '+r.key;rs.appendChild(o);
   });
-
-  roundSelect.onchange();
 });
 
-document.getElementById("roundSelect").onchange = function () {
-  currentRound = this.value;
-  const qSelect = document.getElementById("questionSelect");
-  qSelect.innerHTML = "";
-
-  questionsData[currentRound].questions.forEach((q, i) => {
-    const opt = document.createElement("option");
-    opt.value = i;
-    opt.innerText = `${q.id} ${q.used ? "✓" : ""}`;
-    if (q.used) opt.className = "used";
-    qSelect.appendChild(opt);
-  });
-
-  qSelect.onchange();
-};
-
-document.getElementById("questionSelect").onchange = function () {
-  currentQuestionIndex = this.value;
-  renderPreview();
-};
-
-// ===== PREVIEW =====
-function renderPreview() {
-  const q = questionsData[currentRound].questions[currentQuestionIndex];
-  document.getElementById("questionPreview").innerHTML = `
-    <b>${q.text}</b><br><br>
-    <div class="answer">A: ${q.answers.A}</div>
-    <div class="answer">B: ${q.answers.B}</div>
-    <div class="answer">C: ${q.answers.C}</div>
-    <div class="answer">D: ${q.answers.D}</div>
-    <br>
-    Područje: ${q.category}<br>
-    Težina: ${q.difficulty}<br>
-    Korišteno: ${q.used ? "DA" : "NE"}
-  `;
-}
-
-// ===== GAME CONTROL =====
-function startQuestion() {
-  const q = questionsData[currentRound].questions[currentQuestionIndex];
-  const gameData = {
-    phase: "main",
-    round: Number(currentRound),
-    questionIndex: Number(currentQuestionIndex),
-    questionText: q.text,
-    answers: q.answers,
-    correct: q.correct,
-    value: questionsData[currentRound].value,
-    phaseEndsAt: Date.now() + 20000
-  };
-
-  db.ref("game").set(gameData);
-
-  // mark used
-  db.ref(`questions/rounds/${currentRound}/questions/${currentQuestionIndex}`)
-    .update({ used: true, usedAt: Date.now() });
-}
-
-function pauseGame() {
-  db.ref("game/phase").set("paused");
-}
-
-function revealAnswer() {
-  db.ref("game").update({
-    phase: "reveal",
-    phaseEndsAt: Date.now() + 10000
-  });
-}
-
-function nextQuestion() {
-  db.ref("game").set(null);
-  document.getElementById("liveAnswers").innerHTML = "";
-}
-
-// ===== LIVE ANSWERS =====
-db.ref("answers").on("value", snap => {
-  const tbody = document.getElementById("liveAnswers");
-  tbody.innerHTML = "";
-
-  if (!snap.exists()) return;
-
-  snap.forEach(qSnap => {
-    qSnap.forEach(pSnap => {
-      const r = pSnap.val();
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${pSnap.key}</td>
-        <td>${r.choice}</td>
-        <td>${((r.time - Date.now()) / -1000).toFixed(1)} s</td>
-      `;
-      tbody.appendChild(tr);
+document.getElementById('roundSelect').onchange=()=>{
+  const r=document.getElementById('roundSelect').value;
+  db.ref(`rounds/${r}/questions`).once('value',snap=>{
+    const qs=document.getElementById('questionSelect');qs.innerHTML='';
+    snap.forEach(q=>{
+      const o=document.createElement('option');o.value=q.key;o.text=q.val().text;qs.appendChild(o);
     });
   });
+};
+
+function loadQuestion(){
+  const r=roundSelect.value,q=questionSelect.value;
+  db.ref(`rounds/${r}/questions/${q}`).once('value',snap=>{
+    const v=snap.val();
+    db.ref('game').set({phase:'main',round:r,question:q,questionText:v.text,answers:v.answers,correct:v.correct,phaseEndsAt:Date.now()+20000});
+  });
+}
+function startGame(){db.ref('game').update({running:true});}
+function pauseGame(){db.ref('game').update({phase:'paused'});}
+function nextPhase(){db.ref('game/phase').once('value',s=>{const p=s.val();const n=p==='main'?'questionMark':p==='questionMark'?'reveal':'main';db.ref('game').update({phase:n,phaseEndsAt:Date.now()+10000});});}
+
+function eliminateLast(){
+  db.ref('results').once('value',snap=>{
+    const arr=[];snap.forEach(p=>arr.push({name:p.key,...p.val()}));
+    arr.sort((a,b)=>b.points-a.points||a.question-b.question||a.exclam-b.exclam||a.time-b.time);
+    const loser=arr[arr.length-1].name;
+    db.ref(`players/${loser}`).update({eliminated:true});
+    alert('Eliminiran: '+loser);
+  });
+}
+
+// live tables
+db.ref('answers').on('value',snap=>{
+  const tb=document.querySelector('#answers tbody');tb.innerHTML='';
+  snap.forEach(q=>q.forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${a.key}</td><td>${a.val().choice}</td><td>${((a.val().time||0)/1000).toFixed(1)}</td>`;
+    tb.appendChild(tr);
+  }));
+});
+
+db.ref('results').on('value',snap=>{
+  const arr=[];snap.forEach(p=>arr.push({name:p.key,...p.val()}));
+  arr.sort((a,b)=>b.points-a.points||a.question-b.question||a.exclam-b.exclam||a.time-b.time);
+  const tb=document.querySelector('#leader tbody');tb.innerHTML='';
+  arr.forEach((p,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${i+1}</td><td>${p.name}</td><td>${p.points}</td><td>${p.question}</td><td>${p.exclam}</td><td>${p.time}</td>`;tb.appendChild(tr);});
 });
 </script>
 </body>
