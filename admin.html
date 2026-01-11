@@ -1,104 +1,114 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8" />
-<title>Kviz – Admin</title>
+<meta charset="UTF-8">
+<title>ADMIN – Kviz</title>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
-body{font-family:Arial;background:#111;color:#fff;padding:20px}
-button{padding:10px 16px;margin:6px;font-size:16px;cursor:pointer}
-select{padding:8px;font-size:16px}
-table{border-collapse:collapse;width:100%;margin-top:20px}
-th,td{border:1px solid #555;padding:6px;text-align:center}
-.pause{background:#c0392b}
-.start{background:#27ae60}
+body { font-family:Arial; background:#222; color:#fff; }
+button { padding:10px; font-size:16px; margin:5px; }
+table { border-collapse:collapse; margin-top:10px; }
+td,th { border:1px solid #555; padding:6px 10px; }
 </style>
 </head>
 <body>
-<h2>ADMIN PANEL</h2>
 
-<div>
-  <button class="start" onclick="startGame()">▶ Start</button>
-  <button class="pause" onclick="pauseGame()">⏸ Pause</button>
-  <button onclick="nextPhase()">⏭ Next phase</button>
-  <button onclick="eliminateLast()">❌ Eliminate last</button>
-</div>
+<h1>ADMIN</h1>
 
-<h3>Odabir pitanja</h3>
-<select id="roundSelect"></select>
-<select id="questionSelect"></select>
-<button onclick="loadQuestion()">Učitaj pitanje</button>
+<button onclick="startQuestion()">START PITANJE</button>
+<button onclick="reveal()">REVEAL</button>
+<button onclick="autoEliminate()">ELIMINACIJA</button>
+<button onclick="exportCSV()">EXPORT CSV</button>
 
-<h3>Live stanje</h3>
-<div id="state"></div>
-
-<h3>Odgovori</h3>
-<table id="answers"><thead><tr><th>Igrač</th><th>Odgovor</th><th>Vrijeme</th></tr></thead><tbody></tbody></table>
-
-<h3>Leaderboard</h3>
-<table id="leader"><thead><tr><th>#</th><th>Igrač</th><th>€</th><th>?</th><th>!</th><th>⏱</th></tr></thead><tbody></tbody></table>
+<h2>Leaderboard</h2>
+<table id="board"></table>
 
 <script>
-const firebaseConfig={apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",authDomain:"hpddd-b9bef.firebaseapp.com",databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",projectId:"hpddd-b9bef",storageBucket:"hpddd-b9bef.appspot.com",messagingSenderId:"520105963434",appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"};
+const firebaseConfig = {
+  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef",
+  storageBucket: "hpddd-b9bef.appspot.com",
+  messagingSenderId: "520105963434",
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+};
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
-// populate rounds
-db.ref('rounds').once('value',snap=>{
-  const rs=document.getElementById('roundSelect');
-  snap.forEach(r=>{
-    const o=document.createElement('option');o.value=r.key;o.text='Krug '+r.key;rs.appendChild(o);
-  });
-});
+let round=1, index=0;
 
-document.getElementById('roundSelect').onchange=()=>{
-  const r=document.getElementById('roundSelect').value;
-  db.ref(`rounds/${r}/questions`).once('value',snap=>{
-    const qs=document.getElementById('questionSelect');qs.innerHTML='';
+async function startQuestion(){
+  const qSnap=await db.ref(`rounds/${round}/questions/${index}`).once("value");
+  const q=qSnap.val();
+
+  db.ref("game").set({
+    phase:"question",
+    round,
+    index,
+    text:q.text,
+    correct:q.correct,
+    phaseEndsAt:Date.now()+20000
+  });
+}
+
+function reveal(){
+  db.ref("game").update({
+    phase:"reveal",
+    phaseEndsAt:Date.now()+10000
+  });
+
+  db.ref("answers").once("value",snap=>{
     snap.forEach(q=>{
-      const o=document.createElement('option');o.value=q.key;o.text=q.val().text;qs.appendChild(o);
+      q.forEach(p=>{
+        const {choice}=p.val();
+        const mod=choice[1];
+        const ok=choice[0]===db.ref("game/correct");
+      });
     });
   });
-};
-
-function loadQuestion(){
-  const r=roundSelect.value,q=questionSelect.value;
-  db.ref(`rounds/${r}/questions/${q}`).once('value',snap=>{
-    const v=snap.val();
-    db.ref('game').set({phase:'main',round:r,question:q,questionText:v.text,answers:v.answers,correct:v.correct,phaseEndsAt:Date.now()+20000});
-  });
-}
-function startGame(){db.ref('game').update({running:true});}
-function pauseGame(){db.ref('game').update({phase:'paused'});}
-function nextPhase(){db.ref('game/phase').once('value',s=>{const p=s.val();const n=p==='main'?'questionMark':p==='questionMark'?'reveal':'main';db.ref('game').update({phase:n,phaseEndsAt:Date.now()+10000});});}
-
-function eliminateLast(){
-  db.ref('results').once('value',snap=>{
-    const arr=[];snap.forEach(p=>arr.push({name:p.key,...p.val()}));
-    arr.sort((a,b)=>b.points-a.points||a.question-b.question||a.exclam-b.exclam||a.time-b.time);
-    const loser=arr[arr.length-1].name;
-    db.ref(`players/${loser}`).update({eliminated:true});
-    alert('Eliminiran: '+loser);
-  });
 }
 
-// live tables
-db.ref('answers').on('value',snap=>{
-  const tb=document.querySelector('#answers tbody');tb.innerHTML='';
-  snap.forEach(q=>q.forEach(a=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${a.key}</td><td>${a.val().choice}</td><td>${((a.val().time||0)/1000).toFixed(1)}</td>`;
-    tb.appendChild(tr);
-  }));
-});
+async function autoEliminate(){
+  const rSnap=await db.ref("results").once("value");
+  let list=[];
+  rSnap.forEach(p=>{
+    const r=p.val();
+    list.push({
+      name:p.key,
+      points:r.points||0,
+      q:r.question||0,
+      ex:r.exclam||0,
+      time:r.time||0
+    });
+  });
 
-db.ref('results').on('value',snap=>{
-  const arr=[];snap.forEach(p=>arr.push({name:p.key,...p.val()}));
-  arr.sort((a,b)=>b.points-a.points||a.question-b.question||a.exclam-b.exclam||a.time-b.time);
-  const tb=document.querySelector('#leader tbody');tb.innerHTML='';
-  arr.forEach((p,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${i+1}</td><td>${p.name}</td><td>${p.points}</td><td>${p.question}</td><td>${p.exclam}</td><td>${p.time}</td>`;tb.appendChild(tr);});
-});
+  list.sort((a,b)=>{
+    if(a.points!==b.points) return a.points-b.points;
+    if(a.q!==b.q) return b.q-a.q;
+    if(a.ex!==b.ex) return b.ex-a.ex;
+    return b.time-a.time;
+  });
+
+  db.ref(`players/${list[0].name}/eliminated`).set(true);
+}
+
+function exportCSV(){
+  db.ref("results").once("value",snap=>{
+    let csv="Igrač,Bodovi,?,!,Vrijeme\n";
+    snap.forEach(p=>{
+      const r=p.val();
+      csv+=`${p.key},${r.points||0},${r.question||0},${r.exclam||0},${r.time||0}\n`;
+    });
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv]));
+    a.download="rezultati.csv";
+    a.click();
+  });
+}
 </script>
 </body>
 </html>
