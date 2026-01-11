@@ -1,93 +1,109 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8" />
-<title>Kviz – Igrači</title>
+<meta charset="UTF-8">
+<title>Kviz</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
-body{margin:0;font-family:Arial;background:#fff;text-align:center}
-.header{margin-top:20px}
-.round{font-size:14px;color:#999}
-.question{font-size:24px;color:#d35400;margin:10px 20px}
-.answers{max-width:500px;margin:20px auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.btn{border:none;border-radius:10px;padding:12px;cursor:pointer;box-shadow:0 3px 6px rgba(0,0,0,.25)}
-.btn strong{display:block;font-size:12px}
-.btn span{font-size:18px}
-.btn.excl{background:#e67e22;color:#fff}
-.btn.dot{background:#f6b26b;color:#fff}
-.btn.q{background:#f1c232;color:#000;width:60%;margin:10px auto}
-.btn.locked{opacity:.5;pointer-events:none}
-.timer{font-size:42px;color:#e67e22;margin:20px}
-.msg{font-size:18px;color:#666;margin-top:10px}
-.hidden{display:none}
+body { background:#111; color:#fff; font-family:Arial; text-align:center; }
+#timer { font-size:60px; color:yellow; margin:10px; }
+#meta { font-size:18px; opacity:0.8; }
+#question { font-size:30px; margin:20px; }
+#answers { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; max-width:420px; margin:auto; }
+button { font-size:26px; padding:18px; cursor:pointer; }
+.locked button { opacity:0.4; pointer-events:none; }
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="round" id="round">KRUG 1 / PITANJE 1</div>
-  <div class="question" id="question">U kojem gradu se nalazi tvrđava Barone?</div>
-</div>
-<div class="answers" id="answers"></div>
-<button class="btn q" id="lukavac">+5 / -5 ? – LUKAVAC</button>
-<div class="timer" id="timer">00:20</div>
-<div class="msg" id="msg">Čekamo ostale igrače…</div>
+
+<h1>KVIZ</h1>
+<div id="meta">Krug <span id="round">-</span> | Pitanje <span id="qnum">-</span></div>
+<div id="timer">--</div>
+<div id="question">Čekanje admina…</div>
+<div id="answers"></div>
+<div id="status"></div>
+
 <script>
-  <h3>🏆 Poredak</h3>
-<table id="leaderboard">
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Igrač</th>
-      <th>€</th>
-      <th>?</th>
-      <th>!</th>
-      <th>⏱</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-// UI ONLY – LOGIKA SE SPAJA KASNIJE
-const answers=document.getElementById('answers');
-const opts=[
-{l:'A',t:'Trogir'},{l:'B',t:'Klis'},{l:'C',t:'Šibenik'},{l:'D',t:'Zadar'}
-];
-opts.forEach(o=>{
-  ['!','.'].forEach(m=>{
-    const b=document.createElement('button');
-    b.className='btn '+(m==='!'?'excl':'dot');
-    b.innerHTML=`<strong>${m==='!'?'+10 / -10':'+5 / 0'}</strong><span>${o.l}${m} – ${o.t}</span>`;
-    b.onclick=()=>lock();
-    answers.appendChild(b);
+const firebaseConfig = {
+  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef",
+  storageBucket: "hpddd-b9bef.appspot.com",
+  messagingSenderId: "520105963434",
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const POINTS = {
+  '!': { c:100, w:-100 },
+  '.': { c:50,  w:0 },
+  '?': { c:50,  w:-50 }
+};
+
+let player = localStorage.getItem("player");
+if(!player){
+  player = prompt("Ime igrača:");
+  localStorage.setItem("player",player);
+}
+
+db.ref(`players/${player}`).set({ joined:Date.now(), eliminated:false });
+
+let answered=false, currentKey=null;
+
+function renderAnswers(){
+  const a=document.getElementById("answers");
+  a.innerHTML="";
+  ['A','B','C','D'].forEach(l=>{
+    ['!','.','?'].forEach(s=>{
+      const b=document.createElement("button");
+      b.innerText=l+s;
+      b.onclick=()=>answer(l+s);
+      a.appendChild(b);
+    });
   });
-});
-function lock(){document.querySelectorAll('.btn').forEach(b=>b.classList.add('locked'));}
-let t=20;setInterval(()=>{if(t>=0){timer.innerText='00:'+(t<10?'0':'')+t;t--}},1000);
-</script>
-<div class="leaderboard hidden" id="leaderboard">
-  <h3>POREDAK</h3>
-  <table>
-    <thead><tr><th>#</th><th>Igrač</th><th>€</th><th>!</th><th>?</th><th>Vrijeme</th></tr></thead>
-    <tbody id="lbBody"></tbody>
-  </table>
-</div>
-<style>
-.leaderboard{max-width:600px;margin:20px auto}
-.leaderboard h3{color:#d35400}
-.leaderboard table{width:100%;border-collapse:collapse}
-.leaderboard th,td{border-bottom:1px solid #ddd;padding:6px;font-size:14px}
-.leaderboard th{background:#f6b26b;color:#fff}
-</style>
-<script>
-// DEMO leaderboard
-const demo=[
-{name:'Ana',p:120,e:3,q:1,t:42},
-{name:'Marko',p:120,e:2,q:0,t:38},
-{name:'Ivan',p:90,e:1,q:2,t:55}
-];
-const body=document.getElementById('lbBody');
-demo.forEach((r,i)=>{
- const tr=document.createElement('tr');
- tr.innerHTML=`<td>${i+1}</td><td>${r.name}</td><td>${r.p}</td><td>${r.e}</td><td>${r.q}</td><td>${r.t}s</td>`;
- body.appendChild(tr);
+}
+
+function answer(choice){
+  if(answered) return;
+  answered=true;
+  db.ref(`answers/${currentKey}/${player}`).set({
+    choice,
+    time:Date.now()
+  });
+  document.getElementById("answers").classList.add("locked");
+}
+
+db.ref("game").on("value",snap=>{
+  const g=snap.val();
+  if(!g) return;
+
+  if(g.phase==="question"){
+    answered=false;
+    currentKey=`${g.round}_${g.index}`;
+    document.getElementById("round").innerText=g.round;
+    document.getElementById("qnum").innerText=g.index+1;
+    document.getElementById("question").innerText=g.text;
+    document.getElementById("answers").classList.remove("locked");
+    renderAnswers();
+  }
+
+  if(g.phase==="reveal"){
+    document.getElementById("answers").innerHTML=
+      `Točan odgovor: <b>${g.correct}</b>`;
+  }
+
+  if(g.phaseEndsAt){
+    clearInterval(window.t);
+    window.t=setInterval(()=>{
+      const s=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
+      document.getElementById("timer").innerText=s;
+    },1000);
+  }
 });
 </script>
 </body>
