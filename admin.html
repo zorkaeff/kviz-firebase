@@ -6,63 +6,49 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-body { font-family: Arial; background:#111; color:white; padding:20px; }
-button { padding:10px 18px; margin:6px; font-size:16px; cursor:pointer; }
-input { padding:8px; font-size:16px; }
-.table { margin-top:20px; border-collapse: collapse; width:100%; }
-.table th, .table td { border:1px solid #444; padding:6px; text-align:center; }
-.timer { font-size:32px; color:yellow; }
+body{font-family:Arial;background:#111;color:white;padding:20px}
+button{padding:10px 16px;font-size:16px;margin:4px;cursor:pointer}
+select{padding:6px;font-size:16px}
+.card{border:1px solid #333;padding:12px;margin-bottom:12px}
+.red{background:#a00;color:white}
+.green{background:#0a0;color:white}
 </style>
 </head>
 <body>
 
-<h1>ADMIN – KONTROLA KVIZA</h1>
+<h1>ADMIN PANEL</h1>
 
-<div>
-  <label>Admin ključ:</label>
-  <input type="password" id="key" />
-  <button onclick="login()">Login</button>
+<div class="card">
+  <h3>Stanje igre</h3>
+  <div id="state">—</div>
+  <button onclick="pauseGame()">⏸ Pause</button>
+  <button onclick="resumeGame()">▶ Resume</button>
 </div>
 
-<hr>
+<div class="card">
+  <h3>Odabir pitanja</h3>
+  Krug:
+  <select id="round"></select>
+  Pitanje:
+  <select id="question"></select>
+  <br><br>
+  <button class="green" onclick="startQuestion()">▶ Start pitanje</button>
+</div>
 
-<div id="panel" style="display:none">
+<div class="card">
+  <h3>Faze</h3>
+  <button onclick="setPhase('main')">Main (20s)</button>
+  <button onclick="setPhase('questionMark')">? faza (10s)</button>
+  <button onclick="setPhase('reveal')">Reveal</button>
+  <button onclick="setPhase('leaderboard')">Leaderboard</button>
+</div>
 
-<h2>Status igre</h2>
-<div id="status">Nema igre</div>
-<div class="timer" id="timer">--</div>
-
-<h2>Kontrole</h2>
-<button onclick="startGame()">START KVIZA</button>
-<button onclick="pauseGame()">PAUZA</button>
-<button onclick="nextPhase()">SLJEDEĆA FAZA</button>
-
-<h2>Pitanje</h2>
-<input id="questionText" placeholder="Tekst pitanja" style="width:80%" />
-<br><br>
-<label>Točan odgovor:</label>
-<select id="correct">
-  <option>A</option>
-  <option>B</option>
-  <option>C</option>
-  <option>D</option>
-</select>
-
-<button onclick="sendQuestion()">POSTAVI PITANJE</button>
-
-<h2>Igrači</h2>
-<table class="table" id="players">
-<thead>
-<tr><th>Igrač</th><th>Bodovi</th><th>Eliminacija</th></tr>
-</thead>
-<tbody></tbody>
-</table>
-
+<div class="card">
+  <h3>Live odgovori</h3>
+  <div id="answers">—</div>
 </div>
 
 <script>
-const ADMIN_KEY = "ADMIN123"; // PROMIJENI
-
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain: "hpddd-b9bef.firebaseapp.com",
@@ -75,75 +61,82 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-function login(){
-  if(document.getElementById('key').value === ADMIN_KEY){
-    document.getElementById('panel').style.display='block';
-  } else alert('Pogrešan ključ');
+const roundSel = document.getElementById('round');
+const questionSel = document.getElementById('question');
+
+// učitaj krugove i pitanja
+db.ref('questions/rounds').once('value', snap => {
+  snap.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.key;
+    opt.innerText = 'Krug ' + r.key;
+    roundSel.appendChild(opt);
+  });
+  loadQuestions();
+});
+
+roundSel.onchange = loadQuestions;
+
+function loadQuestions(){
+  questionSel.innerHTML='';
+  db.ref(`questions/rounds/${roundSel.value}/questions`).once('value', snap => {
+    snap.forEach(q => {
+      const opt = document.createElement('option');
+      opt.value = q.key;
+      opt.innerText = q.val().text;
+      questionSel.appendChild(opt);
+    });
+  });
 }
 
-function startGame(){
-  db.ref('game').set({
-    phase:'main',
-    round:1,
-    question:1,
-    phaseEndsAt: Date.now()+20000
+function startQuestion(){
+  const r = roundSel.value;
+  const q = questionSel.value;
+  db.ref(`questions/rounds/${r}/questions/${q}`).once('value', snap => {
+    const data = snap.val();
+    db.ref('game').set({
+      phase: 'main',
+      round: r,
+      question: q,
+      questionText: data.text,
+      answers: data.answers,
+      correct: data.correct,
+      phaseEndsAt: Date.now() + 20000,
+      paused: false
+    });
+  });
+}
+
+function setPhase(p){
+  let duration = 0;
+  if(p==='main') duration = 20000;
+  if(p==='questionMark') duration = 10000;
+  db.ref('game').update({
+    phase: p,
+    phaseEndsAt: duration ? Date.now()+duration : null
   });
 }
 
 function pauseGame(){
-  db.ref('game/phase').set('paused');
+  db.ref('game').update({ paused:true });
+}
+function resumeGame(){
+  db.ref('game').update({ paused:false });
 }
 
-function nextPhase(){
-  db.ref('game').once('value',s=>{
-    const g=s.val();
-    const order=['main','questionMark','reveal'];
-    const i=order.indexOf(g.phase);
-    if(i>=0 && i<order.length-1){
-      db.ref('game').update({
-        phase:order[i+1],
-        phaseEndsAt: Date.now()+20000
-      });
-    }
-  });
-}
-
-function sendQuestion(){
-  db.ref('game').update({
-    questionText: document.getElementById('questionText').value,
-    correct: document.getElementById('correct').value,
-    phase:'main',
-    phaseEndsAt: Date.now()+20000
-  });
-}
-
-// live status
-
-db.ref('game').on('value',s=>{
-  const g=s.val();
-  if(!g) return;
-  document.getElementById('status').innerText = `Faza: ${g.phase}`;
-  if(g.phaseEndsAt){
-    document.getElementById('timer').innerText = Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000))+'s';
-  }
+// stanje igre
+db.ref('game').on('value', snap => {
+  document.getElementById('state').innerText = JSON.stringify(snap.val(), null, 2);
 });
 
-// lista igrača
-
-db.ref('results').on('value',snap=>{
-  const tb=document.querySelector('#players tbody');
-  tb.innerHTML='';
-  snap.forEach(p=>{
-    const r=p.val();
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${p.key}</td><td>${r.points||0}</td><td><button onclick=\"eliminate('${p.key}')\">X</button></td>`;
-    tb.appendChild(tr);
+// live odgovori
+db.ref('answers').on('value', snap => {
+  const out=[];
+  snap.forEach(q=>{
+    q.forEach(p=> out.push(p.key+': '+p.val().choice));
   });
+  document.getElementById('answers').innerText = out.join('\n');
 });
-
-function eliminate(p){
-  db.ref(`players/${p}`).remove();
-}
 </script>
 </body>
 </html>
