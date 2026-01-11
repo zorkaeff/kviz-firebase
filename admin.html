@@ -2,31 +2,34 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>ADMIN – Kviz</title>
+<title>ADMIN – KVIZ</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body { font-family:Arial; background:#222; color:#fff; }
-button { padding:10px; font-size:16px; margin:5px; }
+body { background:#222; color:#fff; font-family:Arial; }
+button { margin:5px; padding:10px 14px; font-size:16px; }
 table { border-collapse:collapse; margin-top:10px; }
-td,th { border:1px solid #555; padding:6px 10px; }
+th,td { border:1px solid #555; padding:6px 10px; }
 </style>
 </head>
 <body>
 
 <h1>ADMIN</h1>
 
-<button onclick="startQuestion()">START PITANJE</button>
-<button onclick="reveal()">REVEAL</button>
-<button onclick="autoEliminate()">ELIMINACIJA</button>
-<button onclick="exportCSV()">EXPORT CSV</button>
-
-<h2>Leaderboard</h2>
-<table id="board"></table>
+<script>
+/* ADMIN KEY */
+const ADMIN_KEY = "kviz123";
+const k = prompt("Admin lozinka:");
+if(k !== ADMIN_KEY){
+  document.body.innerHTML = "<h1>Pristup zabranjen</h1>";
+  throw new Error("NO ADMIN");
+}
+</script>
 
 <script>
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain: "hpddd-b9bef.firebaseapp.com",
@@ -37,13 +40,25 @@ const firebaseConfig = {
   appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
 };
 firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
+const db = firebase.database();
 
-let round=1, index=0;
+/* INIT */
+let round = 1;
+let index = 0;
 
+/* RESET */
+function resetGame(){
+  db.ref("game").set({ phase:"waiting" });
+  db.ref("answers").remove();
+}
+resetGame();
+
+/* CONTROLS */
 async function startQuestion(){
-  const qSnap=await db.ref(`rounds/${round}/questions/${index}`).once("value");
-  const q=qSnap.val();
+  const snap = await db.ref(`rounds/${round}/questions/${index}`).once("value");
+  const q = snap.val();
+
+  db.ref("answers").remove();
 
   db.ref("game").set({
     phase:"question",
@@ -51,32 +66,22 @@ async function startQuestion(){
     index,
     text:q.text,
     correct:q.correct,
-    phaseEndsAt:Date.now()+20000
+    phaseEndsAt: Date.now() + 20000
   });
 }
 
 function reveal(){
   db.ref("game").update({
     phase:"reveal",
-    phaseEndsAt:Date.now()+10000
-  });
-
-  db.ref("answers").once("value",snap=>{
-    snap.forEach(q=>{
-      q.forEach(p=>{
-        const {choice}=p.val();
-        const mod=choice[1];
-        const ok=choice[0]===db.ref("game/correct");
-      });
-    });
+    phaseEndsAt: Date.now() + 10000
   });
 }
 
 async function autoEliminate(){
-  const rSnap=await db.ref("results").once("value");
-  let list=[];
-  rSnap.forEach(p=>{
-    const r=p.val();
+  const snap = await db.ref("results").once("value");
+  let list = [];
+  snap.forEach(p=>{
+    const r = p.val();
     list.push({
       name:p.key,
       points:r.points||0,
@@ -93,7 +98,10 @@ async function autoEliminate(){
     return b.time-a.time;
   });
 
-  db.ref(`players/${list[0].name}/eliminated`).set(true);
+  if(list.length){
+    db.ref(`players/${list[0].name}/eliminated`).set(true);
+    alert("Eliminiran: " + list[0].name);
+  }
 }
 
 function exportCSV(){
@@ -110,5 +118,11 @@ function exportCSV(){
   });
 }
 </script>
+
+<button onclick="startQuestion()">START PITANJE</button>
+<button onclick="reveal()">REVEAL</button>
+<button onclick="autoEliminate()">ELIMINACIJA</button>
+<button onclick="exportCSV()">EXPORT CSV</button>
+
 </body>
 </html>
