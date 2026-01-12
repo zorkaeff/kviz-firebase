@@ -1,65 +1,90 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>Kviz</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body { background:#111; color:#fff; font-family:Arial; text-align:center; }
-#timer { font-size:60px; color:yellow; margin:10px; }
-#meta { font-size:18px; opacity:0.8; }
-#question { font-size:30px; margin:20px; }
-#answers { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; max-width:420px; margin:auto; }
-button { font-size:26px; padding:18px; cursor:pointer; }<!DOCTYPE html>
-<html lang="hr">
-<head>
-<meta charset="UTF-8">
-<title>Kviz</title>
+body {
+  font-family: Arial, sans-serif;
+  background:#111;
+  color:white;
+  text-align:center;
+  margin:0;
+}
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+#top {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 20px;
+}
 
-<style>
-body { background:#111; color:#fff; font-family:Arial; text-align:center; }
-#timer { font-size:60px; color:yellow; margin:10px; }
-#meta { font-size:18px; opacity:0.8; }
-#question { font-size:30px; margin:20px; min-height:60px; }
+#timer {
+  font-size:48px;
+  color:yellow;
+}
+
+#round {
+  font-size:20px;
+}
+
+#question {
+  font-size:28px;
+  margin:20px;
+}
+
 #answers {
   display:grid;
   grid-template-columns:repeat(2,1fr);
-  gap:12px;
+  gap:14px;
   max-width:420px;
-  margin:auto;
+  margin:0 auto;
 }
+
 button {
-  font-size:26px;
   padding:18px;
+  font-size:22px;
   cursor:pointer;
 }
+
 .locked button {
   opacity:0.4;
   pointer-events:none;
 }
+
+#status {
+  margin-top:20px;
+  font-size:18px;
+  color:#ccc;
+}
+
+#waiting {
+  margin-top:10px;
+  font-size:16px;
+  color:#aaa;
+}
 </style>
 </head>
+
 <body>
 
-<h1>KVIZ</h1>
-<div id="meta">
-  Krug <span id="round">-</span> |
-  Pitanje <span id="qnum">-</span>
+<div id="top">
+  <div id="round">—</div>
+  <div id="timer">--</div>
 </div>
 
-<div id="timer">--</div>
 <div id="question">Čekanje admina…</div>
 <div id="answers"></div>
+
 <div id="status"></div>
+<div id="waiting"></div>
 
 <script>
-/* FIREBASE */
+// ================= FIREBASE =================
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain: "hpddd-b9bef.firebaseapp.com",
@@ -69,176 +94,123 @@ const firebaseConfig = {
   messagingSenderId: "520105963434",
   appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-/* IGRAČ */
+// ================= PLAYER =================
 let player = localStorage.getItem("player");
-if(!player){
-  player = prompt("Ime igrača:");
+if (!player) {
+  player = prompt("Unesi ime igrača");
   localStorage.setItem("player", player);
 }
-db.ref(`players/${player}`).set({
-  joined: Date.now(),
-  eliminated: false
+
+db.ref("players/" + player).set({
+  joined: Date.now()
 });
 
-/* STATE */
-let answered = false;
+// ================= STATE =================
 let currentKey = null;
+let answered = false;
 
-/* UI */
-function renderAnswers(){
-  const a = document.getElementById("answers");
-  a.innerHTML = "";
-  ['A','B','C','D'].forEach(l=>{
-    ['!','.','?'].forEach(s=>{
+// ================= RENDER =================
+function renderAnswers(allowQuestionMark) {
+  const wrap = document.getElementById("answers");
+  wrap.innerHTML = "";
+  wrap.classList.remove("locked");
+
+  ["A","B","C","D"].forEach(l => {
+    ["!", "."].forEach(s => {
       const b = document.createElement("button");
-      b.innerText = l+s;
-      b.onclick = ()=>submit(l+s);
-      a.appendChild(b);
+      b.innerText = l + s;
+      b.onclick = () => submitAnswer(l + s);
+      wrap.appendChild(b);
     });
+    if (allowQuestionMark) {
+      const q = document.createElement("button");
+      q.innerText = l + "?";
+      q.onclick = () => submitAnswer(l + "?");
+      wrap.appendChild(q);
+    }
   });
 }
 
-function submit(choice){
-  if(answered) return;
+// ================= SUBMIT =================
+function submitAnswer(choice) {
+  if (answered) return;
   answered = true;
+
   db.ref(`answers/${currentKey}/${player}`).set({
     choice,
     time: Date.now()
   });
+
   document.getElementById("answers").classList.add("locked");
+  document.getElementById("status").innerText = "Odgovor spremljen";
 }
 
-/* GAME LISTENER */
-db.ref("game").on("value", snap=>{
-  const g = snap.val();
-  if(!g || g.phase === "waiting"){
-    document.getElementById("question").innerText = "Čekanje admina…";
-    document.getElementById("answers").innerHTML = "";
-    document.getElementById("timer").innerText = "--";
-    return;
-  }
+// ================= WAITING =================
+function updateWaiting() {
+  if (!currentKey) return;
 
-  if(g.phase === "question"){
-    answered = false;
-    currentKey = `${g.round}_${g.index}`;
-    document.getElementById("round").innerText = g.round;
-    document.getElementById("qnum").innerText = g.index + 1;
-    document.getElementById("question").innerText = g.text;
-    document.getElementById("answers").classList.remove("locked");
-    renderAnswers();
-  }
-
-  if(g.phase === "reveal"){
-    document.getElementById("answers").innerHTML =
-      `Točan odgovor: <b>${g.correct}</b>`;
-  }
-
-  if(g.phaseEndsAt){
-    clearInterval(window.t);
-    window.t = setInterval(()=>{
-      const s = Math.max(0, Math.ceil((g.phaseEndsAt - Date.now())/1000));
-      document.getElementById("timer").innerText = s;
-    },1000);
-  }
-});
-</script>
-</body>
-</html>
-
-.locked button { opacity:0.4; pointer-events:none; }
-</style>
-</head>
-<body>
-
-<h1>KVIZ</h1>
-<div id="meta">Krug <span id="round">-</span> | Pitanje <span id="qnum">-</span></div>
-<div id="timer">--</div>
-<div id="question">Čekanje admina…</div>
-<div id="answers"></div>
-<div id="status"></div>
-
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-const POINTS = {
-  '!': { c:100, w:-100 },
-  '.': { c:50,  w:0 },
-  '?': { c:50,  w:-50 }
-};
-
-let player = localStorage.getItem("player");
-if(!player){
-  player = prompt("Ime igrača:");
-  localStorage.setItem("player",player);
-}
-
-db.ref(`players/${player}`).set({ joined:Date.now(), eliminated:false });
-
-let answered=false, currentKey=null;
-
-function renderAnswers(){
-  const a=document.getElementById("answers");
-  a.innerHTML="";
-  ['A','B','C','D'].forEach(l=>{
-    ['!','.','?'].forEach(s=>{
-      const b=document.createElement("button");
-      b.innerText=l+s;
-      b.onclick=()=>answer(l+s);
-      a.appendChild(b);
+  db.ref("players").once("value", pSnap => {
+    db.ref(`answers/${currentKey}`).once("value", aSnap => {
+      const waiting = [];
+      pSnap.forEach(p => {
+        if (!aSnap.hasChild(p.key)) waiting.push(p.key);
+      });
+      document.getElementById("waiting").innerText =
+        waiting.length ? "Čekamo: " + waiting.join(", ") : "Svi su odgovorili";
     });
   });
 }
+setInterval(updateWaiting, 1000);
 
-function answer(choice){
-  if(answered) return;
-  answered=true;
-  db.ref(`answers/${currentKey}/${player}`).set({
-    choice,
-    time:Date.now()
-  });
-  document.getElementById("answers").classList.add("locked");
-}
+// ================= GAME LISTENER =================
+db.ref("game").on("value", snap => {
+  const g = snap.val();
+  if (!g) return;
 
-db.ref("game").on("value",snap=>{
-  const g=snap.val();
-  if(!g) return;
+  document.getElementById("round").innerText =
+    `Krug ${g.round} · Pitanje ${g.question}`;
 
-  if(g.phase==="question"){
-    answered=false;
-    currentKey=`${g.round}_${g.index}`;
-    document.getElementById("round").innerText=g.round;
-    document.getElementById("qnum").innerText=g.index+1;
-    document.getElementById("question").innerText=g.text;
-    document.getElementById("answers").classList.remove("locked");
-    renderAnswers();
-  }
-
-  if(g.phase==="reveal"){
-    document.getElementById("answers").innerHTML=
-      `Točan odgovor: <b>${g.correct}</b>`;
-  }
-
-  if(g.phaseEndsAt){
+  // TIMER
+  if (g.phaseEndsAt) {
     clearInterval(window.t);
-    window.t=setInterval(()=>{
-      const s=Math.max(0,Math.ceil((g.phaseEndsAt-Date.now())/1000));
-      document.getElementById("timer").innerText=s;
-    },1000);
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((g.phaseEndsAt - Date.now()) / 1000));
+      document.getElementById("timer").innerText = left + "s";
+    };
+    tick();
+    window.t = setInterval(tick, 1000);
+  }
+
+  // FAZE
+  if (g.phase === "waiting") {
+    document.getElementById("question").innerText = "Čekanje admina…";
+    document.getElementById("answers").innerHTML = "";
+    document.getElementById("status").innerText = "";
+    return;
+  }
+
+  if (g.phase === "main" || g.phase === "questionMark") {
+    currentKey = `${g.round}_${g.question}`;
+    answered = false;
+
+    document.getElementById("question").innerText = g.questionText;
+    document.getElementById("status").innerText =
+      g.phase === "questionMark" ? "? faza" : "Odaberi odgovor";
+
+    renderAnswers(g.phase === "questionMark");
+  }
+
+  if (g.phase === "reveal") {
+    document.getElementById("answers").innerHTML =
+      `<h3>Točan odgovor: ${g.correct}</h3>`;
+    document.getElementById("status").innerText = "Rezultati";
   }
 });
 </script>
+
 </body>
 </html>
