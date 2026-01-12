@@ -14,26 +14,22 @@ body {
   color:white;
   padding:20px;
 }
-
 button {
   padding:10px 16px;
   font-size:16px;
   margin:5px;
   cursor:pointer;
 }
-
 table {
   width:100%;
   border-collapse:collapse;
   margin-top:20px;
 }
-
 th, td {
   border:1px solid #444;
   padding:6px;
   text-align:center;
 }
-
 input {
   padding:8px;
   font-size:16px;
@@ -60,8 +56,8 @@ input {
   <button onclick="pause()">PAUSE</button>
   <button onclick="eliminate()">ELIMINATE</button>
 
-  <h3>Status igre</h3>
-  <div id="status"></div>
+  <h3>Status</h3>
+  <div id="status">Učitavanje pitanja…</div>
 
   <h3>Leaderboard</h3>
   <table id="leaderboard"></table>
@@ -70,10 +66,10 @@ input {
 
 <script>
 // ================= ADMIN CONFIG =================
-const ADMIN_KEY = "ADMIN123"; // PROMIJENI PO ŽELJI
+const ADMIN_KEY = "ADMIN123";
 
 // ================= FIREBASE =================
-const firebaseConfig = {
+firebase.initializeApp({
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   authDomain: "hpddd-b9bef.firebaseapp.com",
   databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
@@ -81,57 +77,79 @@ const firebaseConfig = {
   storageBucket: "hpddd-b9bef.appspot.com",
   messagingSenderId: "520105963434",
   appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
-};
-
-firebase.initializeApp(firebaseConfig);
+});
 const db = firebase.database();
 
 // ================= LOGIN =================
 function login() {
-  if (document.getElementById("adminKey").value === ADMIN_KEY) {
-    document.getElementById("login").style.display = "none";
-    document.getElementById("panel").style.display = "block";
-  } else {
-    alert("Pogrešna šifra");
-  }
+  if (adminKey.value === ADMIN_KEY) {
+    login.style.display = "none";
+    panel.style.display = "block";
+  } else alert("Pogrešna šifra");
 }
 
 // ================= QUESTIONS =================
 let rounds = {};
-let round = 1;
+let currentRound = 1;
 let questionIndex = 0;
+let questionsLoaded = false;
 
 fetch("question.json")
   .then(r => r.json())
   .then(data => {
     rounds = data.rounds;
-    document.getElementById("status").innerText = "Pitanja učitana";
+    questionsLoaded = true;
+    status.innerText = "Pitanja učitana";
+  })
+  .catch(() => {
+    status.innerText = "Greška kod učitavanja pitanja";
   });
 
 // ================= GAME CONTROL =================
 function startGame() {
+  currentRound = 1;
+  questionIndex = 0;
+
   db.ref("game").set({
-    phase: "waiting"
+    phase: "waiting",
+    round: currentRound,
+    question: 0
   });
+
+  status.innerText = "Igra spremna";
 }
 
 function nextQuestion() {
-  const q = rounds[round].questions[questionIndex];
-  questionIndex++;
+  if (!questionsLoaded) {
+    alert("Pitanja još nisu učitana");
+    return;
+  }
 
+  const roundData = rounds[currentRound];
+  if (!roundData) {
+    alert("Nema tog kruga");
+    return;
+  }
+
+  const q = roundData.questions[questionIndex];
   if (!q) {
     alert("Nema više pitanja u ovom krugu");
     return;
   }
 
+  questionIndex++;
+
   db.ref("game").set({
     phase: "main",
-    round,
+    round: currentRound,
     question: questionIndex,
     questionText: q.text,
+    answers: q.answers,
     correct: q.correct,
     phaseEndsAt: Date.now() + 20000
   });
+
+  status.innerText = `Krug ${currentRound}, pitanje ${questionIndex}`;
 }
 
 function startQuestionMark() {
@@ -149,9 +167,7 @@ function reveal() {
 }
 
 function pause() {
-  db.ref("game").update({
-    phase: "waiting"
-  });
+  db.ref("game").update({ phase: "waiting" });
 }
 
 // ================= ELIMINATION =================
@@ -164,20 +180,20 @@ function eliminate() {
       players.push({
         name: c.key,
         points: r.points || 0,
-        question: r.question || 0,
-        exclam: r.exclam || 0,
+        q: r.question || 0,
+        ex: r.exclam || 0,
         time: r.time || 0
       });
     });
 
     players.sort((a, b) => {
-      if (a.points !== b.points) return b.points - a.points;
-      if (a.question !== b.question) return b.question - a.question;
-      if (a.exclam !== b.exclam) return b.exclam - a.exclam;
-      return a.time - b.time;
+      if (a.points !== b.points) return a.points - b.points;     // manje bodova ispada
+      if (a.q !== b.q) return a.q - b.q;                         // manje ?
+      if (a.ex !== b.ex) return a.ex - b.ex;                     // manje !
+      return b.time - a.time;                                    // više vremena
     });
 
-    const out = players[players.length - 1];
+    const out = players[0];
     if (out) {
       db.ref("eliminated/" + out.name).set(true);
       alert("Ispao: " + out.name);
@@ -189,6 +205,7 @@ function eliminate() {
 db.ref("results").on("value", snap => {
   let html = `
     <tr>
+      <th>#</th>
       <th>Igrač</th>
       <th>Bodovi</th>
       <th>?</th>
@@ -196,11 +213,12 @@ db.ref("results").on("value", snap => {
       <th>Vrijeme</th>
     </tr>
   `;
-
+  let i = 1;
   snap.forEach(c => {
     const r = c.val();
     html += `
       <tr>
+        <td>${i++}</td>
         <td>${c.key}</td>
         <td>${r.points || 0}</td>
         <td>${r.question || 0}</td>
@@ -209,8 +227,7 @@ db.ref("results").on("value", snap => {
       </tr>
     `;
   });
-
-  document.getElementById("leaderboard").innerHTML = html;
+  leaderboard.innerHTML = html;
 });
 </script>
 
