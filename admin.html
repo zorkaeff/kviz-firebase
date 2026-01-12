@@ -9,30 +9,33 @@
 
 <style>
 body {
-  font-family: Arial;
   background:#111;
   color:white;
+  font-family:Arial;
   padding:20px;
 }
+
 button {
-  padding:10px 16px;
+  padding:10px 18px;
   font-size:16px;
-  margin:5px;
+  margin:6px;
   cursor:pointer;
 }
+
 table {
   width:100%;
   border-collapse:collapse;
   margin-top:20px;
 }
+
 th, td {
   border:1px solid #444;
   padding:6px;
   text-align:center;
 }
-input {
-  padding:8px;
-  font-size:16px;
+
+#answers td {
+  font-size:14px;
 }
 </style>
 </head>
@@ -42,45 +45,38 @@ input {
 <h2>ADMIN PANEL</h2>
 
 <div id="login">
-  <input id="adminKey" placeholder="Admin šifra">
+  <input id="key" placeholder="Admin šifra">
   <button onclick="login()">Login</button>
 </div>
 
 <div id="panel" style="display:none">
 
-  <h3>Kontrole</h3>
-  <button onclick="startGame()">START KVIZA</button>
-  <button onclick="pauseGame()">PAUSE</button>
-  <button onclick="eliminate()">ELIMINATE</button>
+<h3>Status</h3>
+<div id="status">—</div>
 
-  <h3>Status</h3>
-  <div id="status"></div>
+<h3>Kontrole</h3>
+<button onclick="startGame()">START IGRE</button>
+<button onclick="nextQuestion()">SLJEDEĆE PITANJE</button>
 
-  <h3>Leaderboard</h3>
-  <table id="leaderboard"></table>
+<h3>Odgovori igrača</h3>
+<table id="answers"></table>
 
 </div>
 
 <script>
-// ================= ADMIN CONFIG =================
-const ADMIN_KEY = "ADMIN123"; // PROMIJENI
+// ===== ADMIN CONFIG =====
+const ADMIN_KEY = "ADMIN123"; // promijeni po želji
 
-// ================= FIREBASE =================
-const firebaseConfig = {
+// ===== FIREBASE =====
+firebase.initializeApp({
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
-};
-firebase.initializeApp(firebaseConfig);
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app"
+});
 const db = firebase.database();
 
-// ================= LOGIN =================
+// ===== LOGIN =====
 function login() {
-  if (document.getElementById("adminKey").value === ADMIN_KEY) {
+  if (document.getElementById("key").value === ADMIN_KEY) {
     document.getElementById("login").style.display = "none";
     document.getElementById("panel").style.display = "block";
   } else {
@@ -88,381 +84,85 @@ function login() {
   }
 }
 
-// ================= QUESTIONS =================
+// ===== QUESTIONS =====
 let rounds = {};
-let currentRound = 1;
-let questionIndex = 0;
+let round = 1;
+let qi = 0;
 
 fetch("question.json")
   .then(r => r.json())
-  .then(data => {
-    rounds = data.rounds;
+  .then(d => {
+    rounds = d.rounds;
     document.getElementById("status").innerText = "Pitanja učitana";
   });
 
-// ================= START GAME =================
+// ===== GAME FLOW =====
 function startGame() {
-  currentRound = 1;
-  questionIndex = 0;
-  nextQuestion();
-}
-
-// ================= NEXT QUESTION =================
-function nextQuestion() {
-  const round = rounds[currentRound];
-  if (!round) {
-    document.getElementById("status").innerText = "Kviz završen";
-    return;
-  }
-
-  const q = round.questions[questionIndex];
-  if (!q) {
-    currentRound++;
-    questionIndex = 0;
-    nextQuestion();
-    return;
-  }
-
-  questionIndex++;
-
-  db.ref("game").set({
-    phase: "main",
-    round: currentRound,
-    question: q.id,
-    questionText: q.text,
-    answers: q.answers,
-    correct: q.correct,
-    phaseEndsAt: Date.now() + 20000
-  });
-
-  document.getElementById("status").innerText =
-    `Krug ${currentRound} – pitanje ${questionIndex}`;
-}
-
-// ================= PAUSE =================
-function pauseGame() {
-  db.ref("game").update({ phase: "paused" });
-}
-
-// ================= AUTOMATSKI TIJEK =================
-db.ref("game").on("value", snap => {
-  const g = snap.val();
-  if (!g || !g.phaseEndsAt) return;
-  if (Date.now() < g.phaseEndsAt) return;
-
-  if (g.phase === "main") {
-    db.ref("game").update({
-      phase: "questionMark",
-      phaseEndsAt: Date.now() + 10000
-    });
-  }
-  else if (g.phase === "questionMark") {
-    db.ref("game").update({
-      phase: "reveal",
-      phaseEndsAt: Date.now() + 10000
-    });
-  }
-  else if (g.phase === "reveal") {
-    db.ref("game").update({
-      phase: "leaderboard",
-      phaseEndsAt: Date.now() + 40000
-    });
-  }
-  else if (g.phase === "leaderboard") {
-    nextQuestion();
-  }
-});
-
-// ================= ELIMINATION =================
-function eliminate() {
-  db.ref("results").once("value", snap => {
-    const players = [];
-
-    snap.forEach(c => {
-      const r = c.val();
-      players.push({
-        name: c.key,
-        points: r.points || 0,
-        q: r.question || 0,
-        e: r.exclam || 0,
-        t: r.time || 0
-      });
-    });
-
-    players.sort((a,b)=>{
-      if(a.points!==b.points) return a.points-b.points;
-      if(a.q!==b.q) return a.q-b.q;
-      if(a.e!==b.e) return a.e-b.e;
-      return b.t-a.t;
-    });
-
-    const out = players[0];
-    if(out){
-      db.ref("eliminated/"+out.name).set(true);
-      alert("Ispao: "+out.name);
-    }
-  });
-}
-
-// ================= LEADERBOARD =================
-db.ref("results").on("value", snap => {
-  let html = `
-    <tr>
-      <th>Igrač</th>
-      <th>Bodovi</th>
-      <th>?</th>
-      <th>!</th>
-      <th>Vrijeme</th>
-    </tr>
-  `;
-  snap.forEach(c => {
-    const r = c.val();
-    html += `
-      <tr>
-        <td>${c.key}</td>
-        <td>${r.points||0}</td>
-        <td>${r.question||0}</td>
-        <td>${r.exclam||0}</td>
-        <td>${r.time||0}</td>
-      </tr>
-    `;
-  });
-  document.getElementById("leaderboard").innerHTML = html;
-});
-</script>
-
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="hr">
-<head>
-<meta charset="UTF-8">
-<title>Kviz – Admin</title>
-
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
-<style>
-body {
-  font-family: Arial, sans-serif;
-  background:#111;
-  color:white;
-  padding:20px;
-}
-button {
-  padding:10px 16px;
-  font-size:16px;
-  margin:5px;
-  cursor:pointer;
-}
-table {
-  width:100%;
-  border-collapse:collapse;
-  margin-top:20px;
-}
-th, td {
-  border:1px solid #444;
-  padding:6px;
-  text-align:center;
-}
-input {
-  padding:8px;
-  font-size:16px;
-}
-</style>
-</head>
-
-<body>
-
-<h2>ADMIN PANEL</h2>
-
-<div id="login">
-  <input id="adminKey" placeholder="Admin šifra">
-  <button onclick="login()">Login</button>
-</div>
-
-<div id="panel" style="display:none">
-
-  <h3>Kontrole</h3>
-  <button onclick="startGame()">START</button>
-  <button onclick="nextQuestion()">NEXT QUESTION</button>
-  <button onclick="startQuestionMark()">? FAZA</button>
-  <button onclick="reveal()">REVEAL</button>
-  <button onclick="pause()">PAUSE</button>
-  <button onclick="eliminate()">ELIMINATE</button>
-
-  <h3>Status</h3>
-  <div id="status">Učitavanje pitanja…</div>
-
-  <h3>Leaderboard</h3>
-  <table id="leaderboard"></table>
-
-</div>
-
-<script>
-// ================= ADMIN CONFIG =================
-const ADMIN_KEY = "ADMIN123";
-
-// ================= FIREBASE =================
-firebase.initializeApp({
-  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
-});
-const db = firebase.database();
-
-// ================= LOGIN =================
-function login() {
-  if (adminKey.value === ADMIN_KEY) {
-    login.style.display = "none";
-    panel.style.display = "block";
-  } else alert("Pogrešna šifra");
-}
-
-// ================= QUESTIONS =================
-let rounds = {};
-let currentRound = 1;
-let questionIndex = 0;
-let questionsLoaded = false;
-
-fetch("question.json")
-  .then(r => r.json())
-  .then(data => {
-    rounds = data.rounds;
-    questionsLoaded = true;
-    status.innerText = "Pitanja učitana";
-  })
-  .catch(() => {
-    status.innerText = "Greška kod učitavanja pitanja";
-  });
-
-// ================= GAME CONTROL =================
-function startGame() {
-  currentRound = 1;
-  questionIndex = 0;
-
-  db.ref("game").set({
-    phase: "waiting",
-    round: currentRound,
-    question: 0
-  });
-
-  status.innerText = "Igra spremna";
+  db.ref("game").set({ phase: "waiting" });
+  document.getElementById("status").innerText = "Igra pokrenuta";
 }
 
 function nextQuestion() {
-  if (!questionsLoaded) {
-    alert("Pitanja još nisu učitana");
-    return;
-  }
-
-  const roundData = rounds[currentRound];
-  if (!roundData) {
-    alert("Nema tog kruga");
-    return;
-  }
-
-  const q = roundData.questions[questionIndex];
+  const q = rounds[round]?.questions[qi];
   if (!q) {
     alert("Nema više pitanja u ovom krugu");
     return;
   }
 
-  questionIndex++;
+  qi++;
 
+  const qid = q.id;
+
+  // očisti stare odgovore
+  db.ref("answers/" + qid).remove();
+
+  // POŠALJI PITANJE
   db.ref("game").set({
-    phase: "main",
-    round: currentRound,
-    question: questionIndex,
-    questionText: q.text,
+    phase: "question",
+    qid: qid,
+    text: q.text,
     answers: q.answers,
     correct: q.correct,
-    phaseEndsAt: Date.now() + 20000
+    endsAt: Date.now() + 20000
   });
 
-  status.innerText = `Krug ${currentRound}, pitanje ${questionIndex}`;
-}
+  document.getElementById("status").innerText =
+    `Pitanje ${qid} – GLAVNA FAZA`;
 
-function startQuestionMark() {
-  db.ref("game").update({
-    phase: "questionMark",
-    phaseEndsAt: Date.now() + 10000
-  });
-}
-
-function reveal() {
-  db.ref("game").update({
-    phase: "reveal",
-    phaseEndsAt: Date.now() + 10000
-  });
-}
-
-function pause() {
-  db.ref("game").update({ phase: "waiting" });
-}
-
-// ================= ELIMINATION =================
-function eliminate() {
-  db.ref("results").once("value", snap => {
-    const players = [];
-
-    snap.forEach(c => {
-      const r = c.val();
-      players.push({
-        name: c.key,
-        points: r.points || 0,
-        q: r.question || 0,
-        ex: r.exclam || 0,
-        time: r.time || 0
-      });
+  // AUTOMATSKI REVEAL
+  setTimeout(() => {
+    db.ref("game").update({
+      phase: "reveal"
     });
-
-    players.sort((a, b) => {
-      if (a.points !== b.points) return a.points - b.points;     // manje bodova ispada
-      if (a.q !== b.q) return a.q - b.q;                         // manje ?
-      if (a.ex !== b.ex) return a.ex - b.ex;                     // manje !
-      return b.time - a.time;                                    // više vremena
-    });
-
-    const out = players[0];
-    if (out) {
-      db.ref("eliminated/" + out.name).set(true);
-      alert("Ispao: " + out.name);
-    }
-  });
+    document.getElementById("status").innerText =
+      `Pitanje ${qid} – REVEAL`;
+  }, 20000);
 }
 
-// ================= LEADERBOARD =================
-db.ref("results").on("value", snap => {
+// ===== ANSWERS LISTENER =====
+db.ref("answers").on("value", snap => {
   let html = `
     <tr>
-      <th>#</th>
       <th>Igrač</th>
-      <th>Bodovi</th>
-      <th>?</th>
-      <th>!</th>
+      <th>Odgovor</th>
       <th>Vrijeme</th>
     </tr>
   `;
-  let i = 1;
-  snap.forEach(c => {
-    const r = c.val();
-    html += `
-      <tr>
-        <td>${i++}</td>
-        <td>${c.key}</td>
-        <td>${r.points || 0}</td>
-        <td>${r.question || 0}</td>
-        <td>${r.exclam || 0}</td>
-        <td>${r.time || 0}</td>
-      </tr>
-    `;
+
+  snap.forEach(q => {
+    q.forEach(p => {
+      const a = p.val();
+      html += `
+        <tr>
+          <td>${p.key}</td>
+          <td>${a.answer}</td>
+          <td>${a.time ? new Date(a.time).toLocaleTimeString() : ""}</td>
+        </tr>
+      `;
+    });
   });
-  leaderboard.innerHTML = html;
+
+  document.getElementById("answers").innerHTML = html;
 });
 </script>
 
