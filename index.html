@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Kviz</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -9,27 +9,23 @@
 
 <style>
 body {
-  font-family: Arial, sans-serif;
+  font-family: Arial;
   background:#111;
   color:white;
   text-align:center;
-  margin:0;
 }
 
-#top {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:10px 20px;
-}
+h2 { margin-top:20px; }
 
 #timer {
   font-size:48px;
   color:yellow;
+  margin:20px;
 }
 
-#round {
-  font-size:20px;
+#roundInfo {
+  font-size:18px;
+  opacity:0.8;
 }
 
 #question {
@@ -39,10 +35,10 @@ body {
 
 #answers {
   display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:14px;
+  grid-template-columns:repeat(2, 1fr);
+  gap:12px;
   max-width:420px;
-  margin:0 auto;
+  margin:30px auto;
 }
 
 button {
@@ -52,38 +48,37 @@ button {
 }
 
 .locked button {
-  opacity:0.4;
+  opacity:0.5;
   pointer-events:none;
 }
 
-#status {
+#info {
   margin-top:20px;
   font-size:18px;
-  color:#ccc;
-}
-
-#waiting {
-  margin-top:10px;
-  font-size:16px;
-  color:#aaa;
+  opacity:0.9;
 }
 </style>
 </head>
 
 <body>
 
-<div id="top">
-  <div id="round">—</div>
-  <div id="timer">--</div>
-</div>
+<h2>KVIZ</h2>
 
-<div id="question">Čekanje admina…</div>
+<div id="roundInfo"></div>
+<div id="timer">--</div>
+<div id="question">Čekamo admina…</div>
+
 <div id="answers"></div>
-
-<div id="status"></div>
-<div id="waiting"></div>
+<div id="info"></div>
 
 <script>
+// ================= PLAYER =================
+let player = localStorage.getItem("player");
+if (!player) {
+  player = prompt("Upiši ime igrača");
+  localStorage.setItem("player", player);
+}
+
 // ================= FIREBASE =================
 const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
@@ -98,118 +93,120 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ================= PLAYER =================
-let player = localStorage.getItem("player");
-if (!player) {
-  player = prompt("Unesi ime igrača");
-  localStorage.setItem("player", player);
-}
-
+// registracija
 db.ref("players/" + player).set({
   joined: Date.now()
 });
 
 // ================= STATE =================
-let currentKey = null;
 let answered = false;
+let currentQuestion = null;
 
-// ================= RENDER =================
-function renderAnswers(allowQuestionMark) {
-  const wrap = document.getElementById("answers");
-  wrap.innerHTML = "";
-  wrap.classList.remove("locked");
+// ================= ANSWERS =================
+function renderButtons(modes) {
+  const div = document.getElementById("answers");
+  div.classList.remove("locked");
+  div.innerHTML = "";
 
-  ["A","B","C","D"].forEach(l => {
-    ["!", "."].forEach(s => {
+  ['A','B','C','D'].forEach(l => {
+    modes.forEach(m => {
       const b = document.createElement("button");
-      b.innerText = l + s;
-      b.onclick = () => submitAnswer(l + s);
-      wrap.appendChild(b);
+      b.innerText = l + m;
+      b.onclick = () => submit(l + m);
+      div.appendChild(b);
     });
-    if (allowQuestionMark) {
-      const q = document.createElement("button");
-      q.innerText = l + "?";
-      q.onclick = () => submitAnswer(l + "?");
-      wrap.appendChild(q);
-    }
   });
 }
 
-// ================= SUBMIT =================
-function submitAnswer(choice) {
-  if (answered) return;
+function submit(choice) {
+  if (answered || !currentQuestion) return;
   answered = true;
 
-  db.ref(`answers/${currentKey}/${player}`).set({
+  db.ref(`answers/${currentQuestion}/${player}`).set({
     choice,
     time: Date.now()
   });
 
   document.getElementById("answers").classList.add("locked");
-  document.getElementById("status").innerText = "Odgovor spremljen";
+  document.getElementById("info").innerText = "Odgovor spremljen";
 }
 
-// ================= WAITING =================
-function updateWaiting() {
-  if (!currentKey) return;
-
-  db.ref("players").once("value", pSnap => {
-    db.ref(`answers/${currentKey}`).once("value", aSnap => {
-      const waiting = [];
-      pSnap.forEach(p => {
-        if (!aSnap.hasChild(p.key)) waiting.push(p.key);
-      });
-      document.getElementById("waiting").innerText =
-        waiting.length ? "Čekamo: " + waiting.join(", ") : "Svi su odgovorili";
-    });
-  });
+// ================= TIMER =================
+function startTimer(end) {
+  clearInterval(window.timerInt);
+  window.timerInt = setInterval(() => {
+    const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    document.getElementById("timer").innerText = left + "s";
+  }, 500);
 }
-setInterval(updateWaiting, 1000);
 
 // ================= GAME LISTENER =================
 db.ref("game").on("value", snap => {
   const g = snap.val();
   if (!g) return;
 
-  document.getElementById("round").innerText =
-    `Krug ${g.round} · Pitanje ${g.question}`;
-
-  // TIMER
-  if (g.phaseEndsAt) {
-    clearInterval(window.t);
-    const tick = () => {
-      const left = Math.max(0, Math.ceil((g.phaseEndsAt - Date.now()) / 1000));
-      document.getElementById("timer").innerText = left + "s";
-    };
-    tick();
-    window.t = setInterval(tick, 1000);
-  }
-
-  // FAZE
-  if (g.phase === "waiting") {
-    document.getElementById("question").innerText = "Čekanje admina…";
-    document.getElementById("answers").innerHTML = "";
-    document.getElementById("status").innerText = "";
+  if (g.phase === "paused") {
+    document.getElementById("question").innerText = "Kviz pauziran";
     return;
   }
 
-  if (g.phase === "main" || g.phase === "questionMark") {
-    currentKey = `${g.round}_${g.question}`;
+  if (g.question) {
+    currentQuestion = g.question;
     answered = false;
+    document.getElementById("info").innerText = "";
+    document.getElementById("roundInfo").innerText =
+      `Krug ${g.round}`;
+  }
 
+  if (g.questionText) {
     document.getElementById("question").innerText = g.questionText;
-    document.getElementById("status").innerText =
-      g.phase === "questionMark" ? "? faza" : "Odaberi odgovor";
+  }
 
-    renderAnswers(g.phase === "questionMark");
+  if (g.phase === "main") {
+    renderButtons(['!','.','?']);
+  }
+
+  if (g.phase === "questionMark") {
+    if (!answered) {
+      renderButtons(['?']);
+    } else {
+      document.getElementById("answers").innerHTML =
+        "<i>Čekamo ostale igrače…</i>";
+    }
   }
 
   if (g.phase === "reveal") {
     document.getElementById("answers").innerHTML =
-      `<h3>Točan odgovor: ${g.correct}</h3>`;
-    document.getElementById("status").innerText = "Rezultati";
+      `<b>Točan odgovor: ${g.correct}</b>`;
+  }
+
+  if (g.phase === "leaderboard") {
+    document.getElementById("answers").innerHTML =
+      "<i>Prikaz rezultata…</i>";
+  }
+
+  if (g.phaseEndsAt) {
+    startTimer(g.phaseEndsAt);
   }
 });
+
+// ================= WAITING INFO =================
+setInterval(() => {
+  if (!currentQuestion) return;
+
+  db.ref("players").once("value", pSnap => {
+    db.ref(`answers/${currentQuestion}`).once("value", aSnap => {
+      const waiting = [];
+      pSnap.forEach(p => {
+        if (!aSnap.hasChild(p.key)) waiting.push(p.key);
+      });
+      if (waiting.length && !answered) {
+        document.getElementById("info").innerText =
+          "Čekamo: " + waiting.join(", ");
+      }
+    });
+  });
+}, 1000);
 </script>
 
 </body>
