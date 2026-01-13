@@ -2,201 +2,108 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>Kviz – ADMIN</title>
+<title>Kviz – Admin</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body{
-  background:#000;
-  color:#fff;
-  font-family:Arial;
-  padding:20px;
-}
-button{
-  font-size:18px;
-  padding:10px 18px;
-  margin:5px;
-  cursor:pointer;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:20px;
-}
-th,td{
-  border:1px solid #444;
-  padding:6px;
-  text-align:center;
-}
+body { background:#111; color:white; font-family:Arial; padding:20px; }
+button { padding:10px 16px; font-size:16px; margin:4px; }
+table { width:100%; border-collapse:collapse; margin-top:20px; }
+td,th { border:1px solid #444; padding:6px; text-align:center; }
 </style>
 </head>
 
 <body>
 
-<h2>ADMIN PANEL</h2>
+<h2>ADMIN</h2>
 
-<div id="login">
+<div id="loginBox">
   <input id="key" placeholder="Admin šifra">
-  <button onclick="login()">LOGIN</button>
+  <button onclick="adminLogin()">LOGIN</button>
 </div>
 
 <div id="panel" style="display:none">
 
-  <button onclick="startGame()">START KVIZA</button>
-  <button onclick="next()">SLJEDEĆE PITANJE</button>
-  <button onclick="endGame()">KRAJ</button>
-  <button onclick="exportCSV()">CSV EXPORT</button>
+<button onclick="startQuiz()">START KVIZA</button>
 
-  <h3>Status</h3>
-  <div id="status"></div>
+<h3>Status</h3>
+<div id="status"></div>
 
-  <h3>Leaderboard</h3>
-  <table id="leaderboard"></table>
+<h3>Leaderboard</h3>
+<table id="board"></table>
 
 </div>
 
 <script>
-// ================= CONFIG =================
-const ADMIN_KEY = "ADMIN123";
-const QUESTION_TIME = 20000;
+const ADMIN_KEY="ADMIN123";
 
-// ================= FIREBASE =================
+// FIREBASE
 firebase.initializeApp({
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app"
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef"
 });
-const db = firebase.database();
+const db=firebase.database();
 
-// ================= LOGIN =================
-function login(){
-  if(key.value === ADMIN_KEY){
-    login.style.display="none";
-    panel.style.display="block";
+// LOGIN
+function adminLogin(){
+  if(document.getElementById("key").value===ADMIN_KEY){
+    document.getElementById("loginBox").style.display="none";
+    document.getElementById("panel").style.display="block";
   } else alert("Pogrešna šifra");
 }
 
-// ================= QUESTIONS =================
-let rounds={}, order=[], qi=0;
-
-fetch("question.json")
-.then(r=>r.json())
-.then(data=>{
-  for(let r in data.rounds){
-    data.rounds[r].questions.forEach(q=>{
-      if(!q.used){
-        q.round=r;
-        order.push(q);
-      }
-    });
-  }
-  status.innerText="Učitano pitanja: "+order.length;
+// LOAD QUESTIONS
+let questions=[];
+fetch("question.json").then(r=>r.json()).then(d=>{
+  Object.values(d.rounds).forEach(r=>{
+    r.questions.forEach(q=>questions.push(q));
+  });
 });
 
-// ================= GAME FLOW =================
-function startGame(){
-  qi=0;
-  db.ref().set({
-    game:{ phase:"waiting" },
-    answers:{},
-    results:{}
-  });
-  status.innerText="Kviz spreman";
+// START QUIZ
+let qi=0;
+function startQuiz(){
+  next();
 }
 
 function next(){
-  const q = order[qi++];
-  if(!q){ alert("Nema više pitanja"); return; }
+  const q=questions[qi++];
+  if(!q){ alert("Kraj"); return; }
 
-  // lock question
-  q.used=true;
-
+  const key=q.id;
   db.ref("game").set({
-    phase:"main",
-    questionText:q.text,
+    phase:"question",
+    key,
+    text:q.text,
     answers:q.answers,
     correct:q.correct,
-    startedAt:Date.now()
+    endsAt:Date.now()+20000
   });
 
-  setTimeout(()=>reveal(q), QUESTION_TIME);
+  setTimeout(()=>reveal(q),20000);
 }
 
 function reveal(q){
-  db.ref("game").update({ phase:"reveal" });
-
-  db.ref("answers").once("value", snap=>{
-    snap.forEach(p=>{
-      const a=p.val();
-      const name=p.key;
-
-      db.ref("results/"+name).once("value", s=>{
-        const r=s.val() || {points:0,question:0,exclam:0,time:0};
-
-        if(a.answer === q.correct) r.points++;
-        else r.exclam++;
-
-        r.time += a.time || 0;
-
-        db.ref("results/"+name).set(r);
-      });
-    });
-
-    db.ref("answers").remove();
+  db.ref("game").update({
+    phase:"reveal",
+    endsAt:Date.now()+5000
   });
+  setTimeout(next,5000);
 }
 
-function endGame(){
-  db.ref("game").set({ phase:"end" });
-}
-
-// ================= LEADERBOARD =================
-db.ref("results").on("value", snap=>{
-  let arr=[];
-  snap.forEach(c=>arr.push({name:c.key,...c.val()}));
-
-  arr.sort((a,b)=>{
-    if(a.points!==b.points) return a.points-b.points;
-    if(a.question!==b.question) return a.question-b.question;
-    if(a.exclam!==b.exclam) return a.exclam-b.exclam;
-    return b.time-a.time;
+// LEADERBOARD
+db.ref("results").on("value",snap=>{
+  let h="<tr><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th><th>Vrijeme</th></tr>";
+  snap.forEach(c=>{
+    const r=c.val();
+    h+=`<tr><td>${c.key}</td><td>${r.points||0}</td><td>${r.question||0}</td><td>${r.exclam||0}</td><td>${r.time||0}</td></tr>`;
   });
-
-  let h=`<tr>
-    <th>#</th><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th><th>Vrijeme</th>
-  </tr>`;
-
-  arr.forEach((p,i)=>{
-    h+=`<tr>
-      <td>${i+1}</td>
-      <td>${p.name}</td>
-      <td>${p.points}</td>
-      <td>${p.question}</td>
-      <td>${p.exclam}</td>
-      <td>${p.time}</td>
-    </tr>`;
-  });
-
-  leaderboard.innerHTML=h;
+  document.getElementById("board").innerHTML=h;
 });
-
-// ================= CSV =================
-function exportCSV(){
-  db.ref("results").once("value", snap=>{
-    let csv="igrac,bodovi,?,!,vrijeme\n";
-    snap.forEach(c=>{
-      const r=c.val();
-      csv+=`${c.key},${r.points},${r.question},${r.exclam},${r.time}\n`;
-    });
-
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-    a.download="leaderboard.csv";
-    a.click();
-  });
-}
 </script>
-
 </body>
 </html>
