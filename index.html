@@ -8,113 +8,211 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body { background:#111; color:white; font-family:Arial; text-align:center; }
-#question { font-size:26px; margin:20px; }
-#timer { font-size:42px; color:yellow; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:#000;
+  color:#fff;
+  font-family:Arial, sans-serif;
+  height:100vh;
+  width:100vw;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+#app {
+  width:100%;
+  height:100%;
+  padding:40px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+
+h1 { font-size:48px; text-align:center; }
+h2 { font-size:36px; text-align:center; }
+
 #answers {
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:12px;
-  max-width:400px;
-  margin:30px auto;
+  gap:20px;
 }
+
 button {
-  padding:16px;
-  font-size:20px;
+  font-size:32px;
+  padding:30px;
+  background:#111;
+  border:3px solid #444;
+  color:white;
   cursor:pointer;
 }
-.locked button {
-  opacity:0.5;
+
+button.locked {
+  opacity:0.4;
   pointer-events:none;
+}
+
+#leaderboard {
+  width:100%;
+  border-collapse:collapse;
+  font-size:26px;
+}
+
+#leaderboard th, #leaderboard td {
+  border:1px solid #444;
+  padding:10px;
+  text-align:center;
 }
 </style>
 </head>
 
 <body>
 
-<h2>KVIZ</h2>
-<div id="timer">--</div>
-<div id="question">Čekamo admina…</div>
-<div id="answers"></div>
+<div id="app">
+
+  <div id="screen-login">
+    <h1>Unesi ime</h1>
+    <input id="name" style="font-size:32px;padding:20px;width:100%">
+    <button onclick="join()">ULAZ</button>
+  </div>
+
+  <div id="screen-game" style="display:none">
+    <h2 id="question"></h2>
+    <div id="answers"></div>
+  </div>
+
+  <div id="screen-leaderboard" style="display:none">
+    <h1>LEADERBOARD</h1>
+    <table id="leaderboard"></table>
+  </div>
+
+</div>
 
 <script>
-// ===== PLAYER =====
-let player = localStorage.getItem("player");
-if (!player) {
-  player = prompt("Ime igrača");
-  localStorage.setItem("player", player);
-}
-
-// ===== FIREBASE =====
+// ================= FIREBASE =================
 firebase.initializeApp({
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
   databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app"
 });
+
 const db = firebase.database();
 
-let answered = false;
-let qid = null;
+// ================= STATE =================
+let player = "";
+let locked = false;
+let startTime = 0;
 
-// ===== TIMER =====
-function startTimer(end) {
-  clearInterval(window.t);
-  window.t = setInterval(() => {
-    const s = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-    document.getElementById("timer").innerText = s + "s";
-  }, 300);
-}
+// ================= JOIN =================
+function join() {
+  player = name.value.trim();
+  if (!player) return;
 
-// ===== ANSWERS =====
-function renderAnswers(a) {
-  const div = document.getElementById("answers");
-  div.classList.remove("locked");
-  div.innerHTML = "";
-
-  Object.entries(a).forEach(([key, text]) => {
-    const b = document.createElement("button");
-    b.innerText = key + ": " + text;
-    b.onclick = () => answer(key);
-    div.appendChild(b);
-  });
-}
-
-function answer(letter) {
-  if (answered || !qid) return;
-  answered = true;
-
-  db.ref(`answers/${qid}/${player}`).set({
-    answer: letter,
-    time: Date.now()
+  db.ref("results/" + player).set({
+    points: 0,
+    question: 0,
+    exclam: 0,
+    time: 0
   });
 
-  document.getElementById("answers").classList.add("locked");
+  screen-login.style.display = "none";
+  screen-game.style.display = "flex";
 }
 
-// ===== GAME LISTENER =====
+// ================= GAME LISTENER =================
 db.ref("game").on("value", snap => {
   const g = snap.val();
   if (!g) return;
 
-  if (g.phase === "waiting") {
-    document.getElementById("question").innerText = "Čekamo sljedeće pitanje…";
-    document.getElementById("answers").innerHTML = "";
-    return;
-  }
-
-  if (g.phase === "question") {
-    answered = false;
-    qid = g.qid;
-
-    document.getElementById("question").innerText = g.text;
-    renderAnswers(g.answers);
-    startTimer(g.endsAt);
+  if (g.phase === "main") {
+    locked = false;
+    startTime = Date.now();
+    showQuestion(g.questionText, g.answers);
   }
 
   if (g.phase === "reveal") {
-    document.getElementById("answers").innerHTML =
-      `<b>Točan odgovor: ${g.correct}</b>`;
+    lockAll();
+  }
+
+  if (g.phase === "end") {
+    showLeaderboard();
   }
 });
+
+// ================= UI =================
+function showQuestion(text, answers) {
+  question.innerText = text;
+  answersDiv = document.getElementById("answers");
+  answersDiv.innerHTML = "";
+
+  for (let key in answers) {
+    const b = document.createElement("button");
+    b.innerText = key + ": " + answers[key];
+    b.onclick = () => answer(key);
+    answersDiv.appendChild(b);
+  }
+}
+
+function lockAll() {
+  document.querySelectorAll("button").forEach(b => b.classList.add("locked"));
+}
+
+// ================= ANSWER =================
+function answer(choice) {
+  if (locked) return;
+  locked = true;
+  lockAll();
+
+  const timeSpent = Date.now() - startTime;
+
+  db.ref("answers/" + player).set({
+    answer: choice,
+    time: timeSpent
+  });
+}
+
+// ================= LEADERBOARD =================
+db.ref("results").on("value", snap => {
+  let rows = `
+    <tr>
+      <th>#</th>
+      <th>Igrač</th>
+      <th>Bodovi</th>
+      <th>?</th>
+      <th>!</th>
+      <th>Vrijeme</th>
+    </tr>`;
+
+  let arr = [];
+  snap.forEach(c => {
+    arr.push({ name:c.key, ...c.val() });
+  });
+
+  arr.sort((a,b)=>{
+    if (a.points !== b.points) return a.points - b.points;
+    if (a.question !== b.question) return a.question - b.question;
+    if (a.exclam !== b.exclam) return a.exclam - b.exclam;
+    return b.time - a.time;
+  });
+
+  arr.forEach((p,i)=>{
+    rows += `
+      <tr>
+        <td>${i+1}</td>
+        <td>${p.name}</td>
+        <td>${p.points}</td>
+        <td>${p.question}</td>
+        <td>${p.exclam}</td>
+        <td>${p.time}</td>
+      </tr>`;
+  });
+
+  leaderboard.innerHTML = rows;
+});
+
+function showLeaderboard() {
+  screen-game.style.display="none";
+  screen-leaderboard.style.display="block";
+}
 </script>
 
 </body>
