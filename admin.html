@@ -7,89 +7,168 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body{background:#111;color:#fff;font-family:Arial;padding:20px}
-button{padding:10px 16px;font-size:16px;margin:5px}
-table{width:100%;border-collapse:collapse}
+button{padding:10px 16px;font-size:16px;margin:5px;cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:20px}
 th,td{border:1px solid #444;padding:6px;text-align:center}
+input{padding:8px;font-size:16px}
 </style>
 </head>
 <body>
-<h2>ADMIN</h2>
-<div id="login">
-<input id="key" placeholder="Admin šifra">
-<button onclick="login()">LOGIN</button>
+
+<h2>ADMIN PANEL</h2>
+
+<!-- LOGIN -->
+<div id="loginBox">
+  <input id="adminKeyInput" placeholder="Admin šifra">
+  <button onclick="adminLogin()">LOGIN</button>
 </div>
 
+<!-- PANEL -->
 <div id="panel" style="display:none">
-<button onclick="startGame()">START KVIZA</button>
-<button onclick="pause()">PAUSE</button>
-<h3>Status</h3><div id="status"></div>
-<h3>Leaderboard</h3><table id="lb"></table>
+  <button onclick="startGame()">START KVIZA</button>
+  <button onclick="pauseGame()">PAUSE</button>
+
+  <h3>Status</h3>
+  <div id="status">Spremno</div>
+
+  <h3>Leaderboard</h3>
+  <table id="leaderboard"></table>
 </div>
 
 <script>
-const ADMIN_KEY='ADMIN123';
-const firebaseConfig={apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",authDomain:"hpddd-b9bef.firebaseapp.com",databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",projectId:"hpddd-b9bef",storageBucket:"hpddd-b9bef.appspot.com",messagingSenderId:"520105963434",appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"};
+/******** CONFIG ********/
+const ADMIN_KEY = "ADMIN123";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef",
+  storageBucket: "hpddd-b9bef.appspot.com",
+  messagingSenderId: "520105963434",
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+};
+
 firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
+const db = firebase.database();
 
-let rounds={},r=1,q=0;
-fetch('question.json').then(r=>r.json()).then(d=>rounds=d.rounds);
-
-function login(){
- if(document.getElementById('key').value!==ADMIN_KEY)return alert('Kriva šifra');
- login.style.display='none';panel.style.display='block';
+/******** LOGIN ********/
+function adminLogin(){
+  const val = document.getElementById("adminKeyInput").value;
+  if(val !== ADMIN_KEY){
+    alert("Pogrešna admin šifra");
+    return;
+  }
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("panel").style.display = "block";
 }
 
-function startGame(){nextQuestion();}
+/******** QUESTIONS ********/
+let rounds = {};
+let currentRound = 1;
+let questionIndex = 0;
+
+fetch("question.json")
+  .then(r => r.json())
+  .then(data => {
+    rounds = data.rounds;
+    document.getElementById("status").innerText = "Pitanja učitana";
+  });
+
+/******** GAME FLOW ********/
+function startGame(){
+  questionIndex = 0;
+  nextQuestion();
+}
 
 function nextQuestion(){
- const qu=rounds[r].questions[q++];
- if(!qu)return alert('Nema pitanja');
- const key='r'+r+'q'+q;
- db.ref('game').set({
-  phase:'question',key,text:qu.text,answers:qu.answers,correct:qu.correct,
-  endsAt:Date.now()+20000
- });
- setTimeout(()=>startQM(key),20000);
-}
+  const round = rounds[currentRound];
+  if(!round){ alert("Nema kruga"); return; }
 
-function startQM(key){
- db.ref('game').update({phase:'questionMark',endsAt:Date.now()+10000});
- setTimeout(()=>reveal(key),10000);
-}
+  const q = round.questions[questionIndex];
+  if(!q){ alert("Nema više pitanja u ovom krugu"); return; }
 
-function reveal(key){
- db.ref('game').update({phase:'reveal',endsAt:Date.now()+10000});
- score(key);
- setTimeout(nextQuestion,10000);
-}
+  questionIndex++;
 
-function pause(){db.ref('game').set({phase:'paused'});}
+  const gameKey = `r${currentRound}q${questionIndex}`;
 
-function score(key){
- db.ref('answers/'+key).once('value',snap=>{
-  snap.forEach(c=>{
-   const ch=c.val().choice;
-   const letter=ch[0],mod=ch[1];
-   const correct=letter===rounds[r].questions[q-1].correct;
-   let delta=0;
-   if(mod==='!')delta=correct?100:-100;
-   if(mod==='.')delta=correct?50:0;
-   if(mod==='?')delta=correct?50:-50;
-   db.ref('results/'+c.key).transaction(v=>{
-    if(!v)v={points:0,question:0,exclam:0,time:0};
-    v.points+=delta;if(mod==='?')v.question++;if(mod==='!')v.exclam++;return v;
-   });
+  db.ref("game").set({
+    phase: "question",
+    key: gameKey,
+    round: currentRound,
+    question: questionIndex,
+    questionText: q.text,
+    answers: q.answers,
+    correct: q.correct,
+    endsAt: Date.now() + 20000
   });
- });
+
+  document.getElementById("status").innerText = "Pitanje " + questionIndex;
+
+  setTimeout(() => startQuestionMark(gameKey), 20000);
 }
 
-// LEADERBOARD
-db.ref('results').on('value',s=>{
- let h='<tr><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th></tr>';
- s.forEach(c=>{const r=c.val();h+=`<tr><td>${c.key}</td><td>${r.points||0}</td><td>${r.question||0}</td><td>${r.exclam||0}</td></tr>`});
- lb.innerHTML=h;
+function startQuestionMark(key){
+  db.ref("game").update({
+    phase: "questionMark",
+    endsAt: Date.now() + 10000
+  });
+
+  setTimeout(() => revealAnswer(key), 10000);
+}
+
+function revealAnswer(key){
+  db.ref("game").update({
+    phase: "reveal",
+    endsAt: Date.now() + 10000
+  });
+
+  calculatePoints(key);
+
+  setTimeout(nextQuestion, 10000);
+}
+
+function pauseGame(){
+  db.ref("game").set({ phase: "paused" });
+}
+
+/******** SCORING ********/
+function calculatePoints(key){
+  db.ref("answers/" + key).once("value", snap => {
+    snap.forEach(c => {
+      const data = c.val();
+      const choice = data.choice;
+      const letter = choice[0];
+      const mod = choice[1];
+
+      const correct = letter === rounds[currentRound].questions[questionIndex-1].correct;
+
+      let delta = 0;
+      if(mod === "!") delta = correct ? 100 : -100;
+      if(mod === ".") delta = correct ? 50 : 0;
+      if(mod === "?") delta = correct ? 50 : -50;
+
+      db.ref("results/" + c.key).transaction(r => {
+        if(!r) r = { points:0, question:0, exclam:0, time:0 };
+        r.points += delta;
+        if(mod === "?") r.question++;
+        if(mod === "!") r.exclam++;
+        return r;
+      });
+    });
+  });
+}
+
+/******** LEADERBOARD ********/
+db.ref("results").on("value", snap => {
+  let html = `<tr><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th></tr>`;
+  snap.forEach(c => {
+    const r = c.val();
+    html += `<tr><td>${c.key}</td><td>${r.points||0}</td><td>${r.question||0}</td><td>${r.exclam||0}</td></tr>`;
+  });
+  document.getElementById("leaderboard").innerHTML = html;
 });
 </script>
+
 </body>
 </html>
