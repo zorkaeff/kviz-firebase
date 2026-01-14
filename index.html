@@ -2,88 +2,310 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>Kviz – Igrač</title>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<title>Kviz</title>
+
 <style>
-body{background:#111;color:#fff;font-family:Arial;text-align:center}
-#timer{font-size:48px;margin:10px}
-#answers{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:500px;margin:20px auto}
-button{font-size:22px;padding:18px;cursor:pointer}
-.locked button{opacity:.4;pointer-events:none}
+body {
+  margin:0;
+  font-family: Arial, sans-serif;
+  background:#0e0e0e;
+  color:white;
+  text-align:center;
+}
+#top {
+  display:flex;
+  justify-content:space-between;
+  padding:15px 30px;
+  font-size:20px;
+}
+#timer {
+  font-size:48px;
+  color:yellow;
+}
+#question {
+  font-size:32px;
+  margin:30px;
+}
+#answers {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:20px;
+  max-width:600px;
+  margin:auto;
+}
+button {
+  padding:20px;
+  font-size:26px;
+  cursor:pointer;
+}
+.locked button {
+  opacity:0.4;
+  pointer-events:none;
+}
+#live {
+  margin-top:20px;
+  font-size:18px;
+}
+#leaderboard {
+  margin-top:30px;
+  font-size:20px;
+}
+.hidden { display:none; }
 </style>
 </head>
+
 <body>
 
-<div id="joinScreen">
-<h2>Upiši ime</h2>
-<input id="playerName" placeholder="Ime">
-<button onclick="joinGame()">ULAZ</button>
+<div id="top">
+  <div id="roundInfo"></div>
+  <div id="timer">--</div>
 </div>
 
-<div id="game" style="display:none">
-<h2 id="status">Čekanje admina…</h2>
-<div id="timer">--</div>
-<div id="question" style="font-size:26px"></div>
+<div id="question"></div>
 <div id="answers"></div>
-<div id="waiting"></div>
-</div>
+<div id="live"></div>
+<div id="leaderboard" class="hidden"></div>
 
 <script>
-// FIREBASE
-const firebaseConfig={apiKey:"AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",authDomain:"hpddd-b9bef.firebaseapp.com",databaseURL:"https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",projectId:"hpddd-b9bef",storageBucket:"hpddd-b9bef.appspot.com",messagingSenderId:"520105963434",appId:"1:520105963434:web:5b25d1f9f28512ae1145d3"};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
+// ================== CONFIG ==================
+const START_TIME = new Date("2026-01-13T18:30:00").getTime();
+const MAIN_TIME = 20;
+const QMARK_TIME = 10;
 
-let player=null,answered=false,currentKey=null;
+const VALUES = [10,20,30,40,50,100];
 
-function joinGame(){
- const n=document.getElementById('playerName').value.trim();
- if(!n)return alert('Upiši ime');
- player=n;
- db.ref('players/'+n).set({joined:Date.now()});
- document.getElementById('joinScreen').style.display='none';
- document.getElementById('game').style.display='block';
+const POINTS = {
+  "!": (v, ok)=> ok ? v : -v,
+  ".": (v, ok)=> ok ? v/2 : 0,
+  "?": (v, ok)=> ok ? v/2 : -v/2
+};
+
+// ================== PLAYER ==================
+const isWatch = location.search.includes("watch");
+let player = isWatch ? "WATCHER" :
+  localStorage.getItem("player") || prompt("Ime igrača:");
+localStorage.setItem("player", player);
+
+// ================== STATE ==================
+let state = {
+  phase: "waiting",
+  round: 1,
+  q: 0,
+  phaseEnd: 0
+};
+
+let players = {};
+let answers = {};
+let usedTime = {};
+
+// ================== QUESTIONS (60) ==================
+const QUESTIONS = [
+/* KRUG 1 */
+{q:"Glavni grad Hrvatske?",a:["Split","Rijeka","Zagreb","Osijek"],c:2},
+{q:"Koliko dana ima prijestupna godina?",a:["364","365","366","367"],c:2},
+{q:"Boja neba?",a:["Zelena","Plava","Crvena","Crna"],c:1},
+{q:"2 + 2 = ?",a:["3","4","5","6"],c:1},
+{q:"More uz Hrvatsku?",a:["Baltičko","Crveno","Jadransko","Crno"],c:2},
+{q:"Koji jezik se govori u HR?",a:["Talijanski","Njemački","Hrvatski","Španjolski"],c:2},
+{q:"Koliko minuta ima sat?",a:["30","45","60","90"],c:2},
+{q:"Koje godišnje doba je ljeto?",a:["Zima","Proljeće","Ljeto","Jesen"],c:2},
+{q:"Sunce izlazi na?",a:["Zapadu","Istoku","Sjeveru","Jugu"],c:1},
+{q:"1 metar = ?",a:["10 cm","100 cm","1000 cm","1 cm"],c:1},
+
+/* KRUG 2 */
+{q:"Glavni grad Italije?",a:["Milano","Rim","Napulj","Torino"],c:1},
+{q:"Koliko kontinenata?",a:["5","6","7","8"],c:2},
+{q:"Najveći ocean?",a:["Atlantski","Tihi","Indijski","Arktički"],c:1},
+{q:"Koji jezik ima slovo Č?",a:["Engleski","Francuski","Hrvatski","Talijanski"],c:2},
+{q:"Koliko dana ima veljača?",a:["28","29","30","31"],c:0},
+{q:"Glavni grad Njemačke?",a:["München","Berlin","Hamburg","Köln"],c:1},
+{q:"Planina u HR?",a:["Alpe","Velebit","Karpati","Pireneji"],c:1},
+{q:"Najmanji broj?",a:["0","1","-1","2"],c:2},
+{q:"Koja životinja laje?",a:["Mačka","Pas","Krava","Ovca"],c:1},
+{q:"Dan ima sati?",a:["12","18","24","30"],c:2},
+
+/* KRUG 3 */
+{q:"Glavni grad Francuske?",a:["Lyon","Pariz","Marseille","Nice"],c:1},
+{q:"Crveni planet?",a:["Venera","Mars","Jupiter","Saturn"],c:1},
+{q:"Koji metal je zlato?",a:["Fe","Au","Ag","Al"],c:1},
+{q:"More između IT i HR?",a:["Egejsko","Jadransko","Crno","Sjeverno"],c:1},
+{q:"Koliko sekundi minuta?",a:["30","45","60","90"],c:2},
+{q:"Koja je valuta HR?",a:["Kuna","Euro","Dolar","Funta"],c:1},
+{q:"Koliko slova ima HR abeceda?",a:["28","29","30","31"],c:1},
+{q:"Koji je mjesec prvi?",a:["Prosinac","Siječanj","Veljača","Ožujak"],c:1},
+{q:"Ptica ne leti?",a:["Vrabac","Pingvin","Galeb","Orao"],c:1},
+{q:"More je?",a:["Slano","Slatko","Gorko","Kiselo"],c:0},
+
+/* KRUG 4 */
+{q:"Glavni grad Španjolske?",a:["Barcelona","Madrid","Valencia","Sevilla"],c:1},
+{q:"Koliko planeta?",a:["7","8","9","10"],c:1},
+{q:"Koji sport s loptom?",a:["Skijanje","Nogomet","Plivanje","Trčanje"],c:1},
+{q:"Najviša planina svijeta?",a:["K2","Everest","Mont Blanc","Kilimanjaro"],c:1},
+{q:"Koji jezik u Brazilu?",a:["Španjolski","Portugalski","Engleski","Francuski"],c:1},
+{q:"Koja rijeka prolazi Zagrebom?",a:["Drava","Sava","Dunav","Kupa"],c:1},
+{q:"Dan nakon subote?",a:["Petak","Nedjelja","Ponedjeljak","Utorak"],c:1},
+{q:"Koliko mjeseci ima godina?",a:["10","11","12","13"],c:2},
+{q:"Koja je boja trave?",a:["Plava","Zelena","Crvena","Žuta"],c:1},
+{q:"More je voda?",a:["Slatka","Slana","Bez okusa","Kisela"],c:1},
+
+/* KRUG 5 */
+{q:"Glavni grad SAD-a?",a:["New York","Washington","Chicago","Boston"],c:1},
+{q:"Koji instrument ima tipke?",a:["Gitara","Klavir","Violina","Bubnjevi"],c:1},
+{q:"Koliko nogu ima pauk?",a:["6","8","10","12"],c:1},
+{q:"Koji je dan prije petka?",a:["Srijeda","Četvrtak","Subota","Utorak"],c:1},
+{q:"Koji jezik u Austriji?",a:["Francuski","Njemački","Talijanski","Španjolski"],c:1},
+{q:"Koja životinja mjauče?",a:["Pas","Mačka","Krava","Konj"],c:1},
+{q:"Koji je planet najveći?",a:["Mars","Jupiter","Zemlja","Venera"],c:1},
+{q:"Koliko sati ima pola dana?",a:["6","8","10","12"],c:3},
+{q:"Koji sport ima koš?",a:["Nogomet","Košarka","Rukomet","Tenis"],c:1},
+{q:"Koja je boja sunca?",a:["Plava","Žuta","Zelena","Crna"],c:1},
+
+/* KRUG 6 */
+{q:"Glavni grad Japana?",a:["Osaka","Kyoto","Tokyo","Nagoya"],c:2},
+{q:"Najduža rijeka?",a:["Nil","Amazon","Dunav","Mississippi"],c:0},
+{q:"Koji jezik u Rusiji?",a:["Ukrajinski","Ruski","Poljski","Češki"],c:1},
+{q:"Koliko minuta sat i pol?",a:["60","90","120","150"],c:1},
+{q:"Koja država je EU?",a:["Norveška","Švicarska","Hrvatska","Island"],c:2},
+{q:"Koji metal je željezo?",a:["Fe","Au","Ag","Al"],c:0},
+{q:"Koja životinja daje mlijeko?",a:["Pas","Krava","Mačka","Ovca"],c:1},
+{q:"Koji jezik ima č ć š?",a:["Engleski","Hrvatski","Talijanski","Španjolski"],c:1},
+{q:"Koji kontinent je HR?",a:["Azija","Afrika","Europa","Amerika"],c:2},
+{q:"Koliko je 10×10?",a:["10","50","100","1000"],c:2}
+];
+
+// ================== GAME LOOP ==================
+function tick(){
+  const now = Date.now();
+  if(now < START_TIME) return;
+
+  if(state.phase==="waiting"){
+    startQuestion();
+  }
+
+  if(now >= state.phaseEnd){
+    if(state.phase==="main") startQMark();
+    else if(state.phase==="qmark") reveal();
+    else if(state.phase==="reveal") startQuestion();
+  }
 }
 
-function renderAnswers(answers,phase){
- const d=document.getElementById('answers');
- d.innerHTML='';answered=false;d.classList.remove('locked');
- Object.entries(answers).forEach(([k,v])=>{
-  const b=document.createElement('button');
-  b.innerText=(phase==='questionMark'?k+'? ':k+' ')+v;
-  b.onclick=()=>submit(k+(phase==='questionMark'?'?':'.'));
-  d.appendChild(b);
- });
+function startQuestion(){
+  state.phase="main";
+  state.phaseEnd=Date.now()+MAIN_TIME*1000;
+  state.q++;
+  if(state.q>60) return endGame();
+  answers[state.q]={};
 }
 
-function submit(choice){
- if(answered)return;
- answered=true;
- document.getElementById('answers').classList.add('locked');
- db.ref('answers/'+currentKey+'/'+player).set({choice,time:Date.now()});
+function startQMark(){
+  state.phase="qmark";
+  state.phaseEnd=Date.now()+QMARK_TIME*1000;
 }
 
-// SLUŠAJ IGRU
-db.ref('game').on('value',snap=>{
- const g=snap.val(); if(!g)return;
- if(g.phase==='question'||g.phase==='questionMark'){
-  currentKey=g.key;
-  document.getElementById('status').innerText='Odgovori';
-  document.getElementById('question').innerText=g.text;
-  renderAnswers(g.answers,g.phase);
- }
- if(g.phase==='reveal'){
-  document.getElementById('answers').innerHTML='Točan odgovor: '+g.correct;
- }
- if(g.endsAt){
-  clearInterval(window.t);
-  window.t=setInterval(()=>{
-   const left=Math.max(0,Math.ceil((g.endsAt-Date.now())/1000));
-   document.getElementById('timer').innerText=left+'s';
-  },250);
- }
-});
+function reveal(){
+  state.phase="reveal";
+  state.phaseEnd=Date.now()+5000;
+  score();
+}
+
+setInterval(tick,1000);
+
+// ================== UI ==================
+function render(){
+  document.getElementById("roundInfo").innerText =
+    `Krug ${Math.ceil(state.q/10)} / Pitanje ${state.q}`;
+
+  const left = Math.max(0,Math.ceil((state.phaseEnd-Date.now())/1000));
+  document.getElementById("timer").innerText=left;
+
+  const q = QUESTIONS[state.q-1];
+  if(!q) return;
+
+  document.getElementById("question").innerText=q.q;
+
+  const aDiv=document.getElementById("answers");
+  aDiv.innerHTML="";
+  if(state.phase==="main"){
+    ["A","B","C","D"].forEach((l,i)=>{
+      ["!","."].forEach(m=>{
+        const b=document.createElement("button");
+        b.innerText=`${l}${m} – ${q.a[i]}`;
+        b.onclick=()=>answer(l,i,m);
+        aDiv.appendChild(b);
+      });
+    });
+    const qBtn=document.createElement("button");
+    qBtn.innerText="? LUKAVAC";
+    qBtn.onclick=()=>answer("?","?", "?");
+    aDiv.appendChild(qBtn);
+  }
+
+  if(state.phase==="qmark"){
+    ["A","B","C","D"].forEach((l,i)=>{
+      const b=document.createElement("button");
+      b.innerText=`${l}? – ${q.a[i]}`;
+      b.onclick=()=>answer(l,i,"?");
+      aDiv.appendChild(b);
+    });
+  }
+
+  renderLive();
+}
+
+function renderLive(){
+  const l=document.getElementById("live");
+  const list=Object.entries(answers[state.q]||{})
+    .map(([p,a])=>`${p}: ${a}`)
+    .join("<br>");
+  l.innerHTML=list || "Čekamo odgovore...";
+}
+
+setInterval(render,500);
+
+// ================== ANSWERS ==================
+function answer(letter,idx,mode){
+  if(isWatch) return;
+  if(answers[state.q][player]) return;
+  answers[state.q][player]=mode==="?"?"?":`${letter}${mode}`;
+  usedTime[player]=(usedTime[player]||0)+
+    (MAIN_TIME+QMARK_TIME)-(state.phaseEnd-Date.now())/1000;
+}
+
+// ================== SCORING ==================
+let results={};
+
+function score(){
+  const q=QUESTIONS[state.q-1];
+  const value=VALUES[Math.ceil(state.q/10)-1];
+  Object.entries(answers[state.q]).forEach(([p,a])=>{
+    if(!results[p]) results[p]={pts:0,q:0,ex:0,time:0};
+    if(a==="?"){ results[p].q++; return; }
+    const ok=(q.a[q.c][0]===q.a[q.c][0]) && (a[0]==="ABCD"[q.c]);
+    const m=a[1];
+    results[p].pts+=POINTS[m](value,ok);
+    if(m==="!") results[p].ex++;
+    if(m==="?") results[p].q++;
+    results[p].time=usedTime[p]||0;
+  });
+  showLeaderboard();
+}
+
+function showLeaderboard(){
+  const lb=document.getElementById("leaderboard");
+  lb.classList.remove("hidden");
+  const sorted=Object.entries(results).sort((a,b)=>{
+    const A=a[1],B=b[1];
+    return B.pts-A.pts || B.q-A.q || B.ex-A.ex || A.time-B.time;
+  });
+  lb.innerHTML=sorted.map(([n,r],i)=>
+    `${i+1}. ${n} | ${r.pts} | ?${r.q} | !${r.ex} | ${Math.round(r.time)}s`
+  ).join("<br>");
+}
+
+function endGame(){
+  alert("Kviz završen");
+}
 </script>
+
 </body>
 </html>
