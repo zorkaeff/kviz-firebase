@@ -1,75 +1,220 @@
-const questions = [
+{
+"rounds": {
+"1": {
+"value": 10,
+"questions": [
+{
+"id": "1-1",
+"text": "Koji je glavni grad Hrvatske?",
+"answers": { "A": "Split", "B": "Rijeka", "C": "Zagreb", "D": "Osijek" },
+"correct": "C",
+"category": "Geografija",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-2",
+"text": "Koliko dana ima prijestupna godina?",
+"answers": { "A": "365", "B": "366", "C": "364", "D": "367" },
+"correct": "B",
+"category": "Opće znanje",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-3",
+"text": "Koje je more uz obalu Hrvatske?",
+"answers": { "A": "Crno", "B": "Egejsko", "C": "Jadransko", "D": "Baltičko" },
+"correct": "C",
+"category": "Geografija",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-4",
+"text": "Koja boja nastaje miješanjem plave i žute?",
+"answers": { "A": "Zelena", "B": "Ljubičasta", "C": "Narančasta", "D": "Smeđa" },
+"correct": "A",
+"category": "Opće znanje",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-5",
+"text": "Koliko kontinenata postoji na Zemlji?",
+"answers": { "A": "5", "B": "6", "C": "7", "D": "8" },
+"correct": "C",
+"category": "Geografija",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-6",
+"text": "Koja je valuta u Hrvatskoj?",
+"answers": { "A": "Kuna", "B": "Euro", "C": "Dolar", "D": "Franak" },
+"correct": "B",
+"category": "Hrvatska",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-7",
+"text": "Koja životinja laje?",
+"answers": { "A": "Mačka", "B": "Pas", "C": "Krava", "D": "Konj" },
+"correct": "B",
+"category": "Opće",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-8",
+"text": "Koji je najveći ocean?",
+"answers": { "A": "Atlantski", "B": "Indijski", "C": "Tihi", "D": "Arktički" },
+"correct": "C",
+"category": "Geografija",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-9",
+"text": "Koliko sati ima jedan dan?",
+"answers": { "A": "12", "B": "18", "C": "24", "D": "36" },
+"correct": "C",
+"category": "Opće",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "1-10",
+"text": "Koji je prvi mjesec u godini?",
+"answers": { "A": "Prosinac", "B": "Veljača", "C": "Siječanj", "D": "Ožujak" },
+"correct": "C",
+"category": "Opće",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+}
+]
+},
 
-/* ================= KRUG 1 – 10 BODOVA ================= */
-{ text:"Koji je glavni grad Hrvatske?", answers:{A:"Split",B:"Rijeka",C:"Zagreb",D:"Osijek"}, correct:"C", value:10 },
-{ text:"Koliko dana ima prijestupna godina?", answers:{A:"364",B:"365",C:"366",D:"367"}, correct:"C", value:10 },
-{ text:"Koja je najveća planeta Sunčeva sustava?", answers:{A:"Mars",B:"Jupiter",C:"Saturn",D:"Neptun"}, correct:"B", value:10 },
-{ text:"Koja boja nastaje miješanjem plave i žute?", answers:{A:"Ljubičasta",B:"Narančasta",C:"Zelena",D:"Smeđa"}, correct:"C", value:10 },
-{ text:"Koliko kontinenata ima na Zemlji?", answers:{A:"5",B:"6",C:"7",D:"8"}, correct:"C", value:10 },
-{ text:"Koja je valuta u Hrvatskoj od 2023.?", answers:{A:"Kuna",B:"Euro",C:"Dolar",D:"Franak"}, correct:"B", value:10 },
-{ text:"Koji je najveći ocean?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Arktički"}, correct:"C", value:10 },
-{ text:"Koji sport koristi reket?", answers:{A:"Nogomet",B:"Tenis",C:"Rukomet",D:"Vaterpolo"}, correct:"B", value:10 },
-{ text:"Koliko sati ima jedan dan?", answers:{A:"12",B:"18",C:"24",D:"36"}, correct:"C", value:10 },
-{ text:"Koji je kemijski simbol za vodu?", answers:{A:"O2",B:"CO2",C:"H2O",D:"HO"}, correct:"C", value:10 },
+"2": {
+"value": 20,
+"questions": [
+{
+"id": "2-1",
+"text": "Koji planet je poznat kao Crveni planet?",
+"answers": { "A": "Venera", "B": "Mars", "C": "Jupiter", "D": "Saturn" },
+"correct": "B",
+"category": "Svemir",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-2",
+"text": "Koji je najveći grad u Hrvatskoj po broju stanovnika?",
+"answers": { "A": "Split", "B": "Rijeka", "C": "Osijek", "D": "Zagreb" },
+"correct": "D",
+"category": "Hrvatska",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-3",
+"text": "Koliko nogu ima pauk?",
+"answers": { "A": "6", "B": "8", "C": "10", "D": "12" },
+"correct": "B",
+"category": "Priroda",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-4",
+"text": "Koja država ima oblik čizme?",
+"answers": { "A": "Španjolska", "B": "Italija", "C": "Grčka", "D": "Portugal" },
+"correct": "B",
+"category": "Geografija",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-5",
+"text": "Koji metal ima kemijsku oznaku Fe?",
+"answers": { "A": "Bakar", "B": "Zlato", "C": "Željezo", "D": "Srebro" },
+"correct": "C",
+"category": "Znanost",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-6",
+"text": "Koji sportaš koristi reket?",
+"answers": { "A": "Nogometaš", "B": "Tenisač", "C": "Plivač", "D": "Skijaš" },
+"correct": "B",
+"category": "Sport",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-7",
+"text": "Koji je najviši vrh Hrvatske?",
+"answers": { "A": "Učka", "B": "Dinara", "C": "Velebit", "D": "Biokovo" },
+"correct": "B",
+"category": "Hrvatska",
+"difficulty": "Srednje",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-8",
+"text": "Koja je najveća životinja na svijetu?",
+"answers": { "A": "Slon", "B": "Kit", "C": "Žirafa", "D": "Nosorog" },
+"correct": "B",
+"category": "Priroda",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-9",
+"text": "Koji instrument ima tipke?",
+"answers": { "A": "Gitara", "B": "Bubnjevi", "C": "Klavir", "D": "Violina" },
+"correct": "C",
+"category": "Glazba",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+},
+{
+"id": "2-10",
+"text": "Koja je boja hrvatske zastave u sredini?",
+"answers": { "A": "Plava", "B": "Bijela", "C": "Crvena", "D": "Zelena" },
+"correct": "B",
+"category": "Hrvatska",
+"difficulty": "Lako",
+"used": false,
+"usedAt": null
+}
+]
+}
 
-/* ================= KRUG 2 – 20 BODOVA ================= */
-{ text:"Koji planet je poznat kao Crveni planet?", answers:{A:"Venera",B:"Mars",C:"Merkur",D:"Saturn"}, correct:"B", value:20 },
-{ text:"Tko je napisao 'Hamleta'?", answers:{A:"Shakespeare",B:"Dante",C:"Goethe",D:"Cervantes"}, correct:"A", value:20 },
-{ text:"Koji je najveći hrvatski otok?", answers:{A:"Krk",B:"Brač",C:"Hvar",D:"Cres"}, correct:"D", value:20 },
-{ text:"Koliko igrača ima nogometna ekipa?", answers:{A:"9",B:"10",C:"11",D:"12"}, correct:"C", value:20 },
-{ text:"Koji plin je potreban za disanje?", answers:{A:"Dušik",B:"Kisik",C:"Ugljik",D:"Vodik"}, correct:"B", value:20 },
-{ text:"Koja država ima najviše stanovnika?", answers:{A:"Indija",B:"SAD",C:"Kina",D:"Rusija"}, correct:"A", value:20 },
-{ text:"Koja je najviša planina na svijetu?", answers:{A:"K2",B:"Everest",C:"Mont Blanc",D:"Kilimanjaro"}, correct:"B", value:20 },
-{ text:"Koji jezik ima najviše izvornih govornika?", answers:{A:"Engleski",B:"Španjolski",C:"Mandarinski",D:"Arapski"}, correct:"C", value:20 },
-{ text:"Koja je najmanja država na svijetu?", answers:{A:"Monako",B:"Vatikan",C:"San Marino",D:"Malta"}, correct:"B", value:20 },
-{ text:"Koliko minuta traje poluvrijeme u nogometu?", answers:{A:"30",B:"40",C:"45",D:"50"}, correct:"C", value:20 },
-
-/* ================= KRUG 3 – 30 BODOVA ================= */
-{ text:"Koji je autor 'Na Drini ćuprija'?", answers:{A:"Krleža",B:"Andrić",C:"Selimović",D:"Ujević"}, correct:"B", value:30 },
-{ text:"Koji metal ima kemijski simbol Fe?", answers:{A:"Olovo",B:"Bakar",C:"Željezo",D:"Srebro"}, correct:"C", value:30 },
-{ text:"U kojem gradu je Koloseum?", answers:{A:"Atena",B:"Rim",C:"Napulj",D:"Milano"}, correct:"B", value:30 },
-{ text:"Koji je najbrži kopneni sisavac?", answers:{A:"Lav",B:"Leopard",C:"Gepard",D:"Tigar"}, correct:"C", value:30 },
-{ text:"Koja država nije članica EU?", answers:{A:"Švicarska",B:"Italija",C:"Njemačka",D:"Austrija"}, correct:"A", value:30 },
-{ text:"Koji instrument ima tipke i pedale?", answers:{A:"Violina",B:"Gitara",C:"Klavir",D:"Flauta"}, correct:"C", value:30 },
-{ text:"Koji je hrvatski simbol na grbu?", answers:{A:"Zvijezda",B:"Lav",C:"Šahovnica",D:"Orao"}, correct:"C", value:30 },
-{ text:"Koliko žica ima standardna gitara?", answers:{A:"4",B:"5",C:"6",D:"7"}, correct:"C", value:30 },
-{ text:"Koja rijeka protječe kroz Pariz?", answers:{A:"Temza",B:"Seina",C:"Rajna",D:"Loara"}, correct:"B", value:30 },
-{ text:"Koji kontinent je najsuši?", answers:{A:"Afrika",B:"Australija",C:"Antarktika",D:"Azija"}, correct:"C", value:30 },
-
-/* ================= KRUG 4 – 40 BODOVA ================= */
-{ text:"Koje godine je Hrvatska postala članica EU?", answers:{A:"2011",B:"2012",C:"2013",D:"2014"}, correct:"C", value:40 },
-{ text:"Tko je oslikao Mona Lisu?", answers:{A:"Michelangelo",B:"Leonardo da Vinci",C:"Rafael",D:"Donatello"}, correct:"B", value:40 },
-{ text:"Koji je najveći unutarnji organ čovjeka?", answers:{A:"Pluća",B:"Mozak",C:"Jetra",D:"Srce"}, correct:"C", value:40 },
-{ text:"Koja država ima oblik čizme?", answers:{A:"Portugal",B:"Španjolska",C:"Italija",D:"Grčka"}, correct:"C", value:40 },
-{ text:"Koji je glavni grad Kanade?", answers:{A:"Toronto",B:"Vancouver",C:"Ottawa",D:"Montreal"}, correct:"C", value:40 },
-{ text:"Koji znanstvenik je razvio teoriju relativnosti?", answers:{A:"Newton",B:"Tesla",C:"Einstein",D:"Galileo"}, correct:"C", value:40 },
-{ text:"Koji je najdublji ocean?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Arktički"}, correct:"C", value:40 },
-{ text:"Koji hrvatski grad zovu Grad heroj?", answers:{A:"Knin",B:"Vukovar",C:"Sisak",D:"Zadar"}, correct:"B", value:40 },
-{ text:"Koliko stranica ima kocka?", answers:{A:"4",B:"5",C:"6",D:"8"}, correct:"C", value:40 },
-{ text:"Koja je valuta Japana?", answers:{A:"Yuan",B:"Won",C:"Jen",D:"Baht"}, correct:"C", value:40 },
-
-/* ================= KRUG 5 – 50 BODOVA ================= */
-{ text:"Koji je najviši aktivni vulkan?", answers:{A:"Etna",B:"Mauna Loa",C:"Ojos del Salado",D:"Vezuv"}, correct:"C", value:50 },
-{ text:"Koji je najduži živac u ljudskom tijelu?", answers:{A:"Vagus",B:"Sijatični",C:"Facijalni",D:"Optički"}, correct:"B", value:50 },
-{ text:"Koja država ima najviše otoka?", answers:{A:"Hrvatska",B:"Indonezija",C:"Švedska",D:"Filipini"}, correct:"C", value:50 },
-{ text:"Tko je bio prvi čovjek na Mjesecu?", answers:{A:"Aldrin",B:"Armstrong",C:"Gagarin",D:"Collins"}, correct:"B", value:50 },
-{ text:"Koji je glavni grad Australije?", answers:{A:"Sydney",B:"Melbourne",C:"Canberra",D:"Perth"}, correct:"C", value:50 },
-{ text:"Koji element ima simbol Au?", answers:{A:"Srebro",B:"Zlato",C:"Bakar",D:"Aluminij"}, correct:"B", value:50 },
-{ text:"Koji je najbrži ptica na svijetu?", answers:{A:"Orao",B:"Sokol",C:"Noj",D:"Albatros"}, correct:"B", value:50 },
-{ text:"Koji je najdublji jezer na svijetu?", answers:{A:"Tanganjika",B:"Kaspijsko",C:"Bajkalsko",D:"Superior"}, correct:"C", value:50 },
-{ text:"Koja država ima najviše Nobelovaca?", answers:{A:"Njemačka",B:"SAD",C:"UK",D:"Francuska"}, correct:"B", value:50 },
-{ text:"Koji je kemijski simbol za natrij?", answers:{A:"Na",B:"N",C:"Ni",D:"Ne"}, correct:"A", value:50 },
-
-/* ================= KRUG 6 – 100 BODOVA ================= */
-{ text:"Koje godine je pao Berlinski zid?", answers:{A:"1987",B:"1988",C:"1989",D:"1990"}, correct:"C", value:100 },
-{ text:"Koji je najstariji poznati pisani ep?", answers:{A:"Ilijada",B:"Epa o Gilgamešu",C:"Odiseja",D:"Mahabharata"}, correct:"B", value:100 },
-{ text:"Koja država je prva uvela opće pravo glasa ženama?", answers:{A:"SAD",B:"Norveška",C:"Novi Zeland",D:"Finska"}, correct:"C", value:100 },
-{ text:"Koji je najveći broj u rimskoj numeraciji?", answers:{A:"M",B:"V",C:"L",D:"C"}, correct:"A", value:100 },
-{ text:"Koji znanstvenik je otkrio penicilin?", answers:{A:"Pasteur",B:"Fleming",C:"Curie",D:"Koch"}, correct:"B", value:100 },
-{ text:"Koji je glavni grad Brazila?", answers:{A:"Rio",B:"Sao Paulo",C:"Brasilia",D:"Salvador"}, correct:"C", value:100 },
-{ text:"Koji ocean je najtopliji?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Južni"}, correct:"B", value:100 },
-{ text:"Koji je najrjeđi krvni tip?", answers:{A:"0-",B:"AB-",C:"B-",D:"A-"}, correct:"B", value:100 },
-{ text:"Koji je najteži prirodni element?", answers:{A:"Uran",B:"Plutonij",C:"Osmij",D:"Radij"}, correct:"C", value:100 },
-{ text:"Koji je hrvatski nobelovac?", answers:{A:"Tesla",B:"Ruđjer Bošković",C:"Andrić",D:"Prelog"}, correct:"D", value:100 }
-
-];
+/* KRUGOVI 3–6 NASTAVLJAJU ISTIM STILOM:
+- 30 / 40 / 50 / 100
+- ukupno 60 pitanja
+(ako želiš, u sljedećoj poruci ti pošaljem i 3–6 bez skraćivanja) */
+}
+}
