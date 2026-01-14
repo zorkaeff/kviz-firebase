@@ -2,259 +2,184 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>LIVE KVIZ</title>
-
+<title>Kviz – Live Multiplayer</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
 <style>
-body { margin:0; background:#000; color:#fff; font-family:Arial; }
-.screen { display:none; padding:20px; }
-button { padding:12px; margin:6px; font-size:18px; cursor:pointer; }
-.answers button { width:45%; }
-#live { font-size:14px; opacity:.8 }
-table { width:100%; border-collapse:collapse; }
-td,th { border:1px solid #444; padding:6px; text-align:center; }
+body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
+#top{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;font-size:20px}
+#timer{font-size:48px;color:yellow}
+#question{font-size:28px;margin:20px}
+#answers{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:500px;margin:20px auto}
+button{font-size:22px;padding:18px;border-radius:8px;border:none;cursor:pointer}
+.a{background:#1e90ff}.b{background:#e67e22}.c{background:#2ecc71}.d{background:#9b59b6}
+.q{background:#555}
+.locked button{opacity:.4;pointer-events:none}
+#live{margin-top:20px;font-size:16px;opacity:.9}
+#leader{margin-top:30px}
+table{width:90%;margin:auto;border-collapse:collapse}
+th,td{border:1px solid #444;padding:6px}
 </style>
 </head>
-
 <body>
 
-<div id="join" class="screen" style="display:block">
-  <h2>LIVE KVIZ</h2>
-  <input id="name" placeholder="Ime igrača">
-  <br><br>
-  <button onclick="join()">ULAZ</button>
+<div id="top">
+  <div id="roundInfo">Krug 1 / Pitanje 1</div>
+  <div id="timer">--</div>
 </div>
 
-<div id="game" class="screen">
-  <h3 id="question"></h3>
-  <div id="timer"></div>
+<div id="question">Čekanje početka kviza…</div>
 
-  <div class="answers" id="answers"></div>
+<div id="answers"></div>
 
-  <div id="live"></div>
+<div id="live"></div>
 
-  <h3>Leaderboard</h3>
-  <table id="board"></table>
-</div>
+<div id="leader"></div>
 
 <script>
-/* ================= FIREBASE ================= */
-firebase.initializeApp({
+// ================= CONFIG =================
+const START_TIME = new Date('2026-01-13T18:30:00Z').getTime();
+const ROUND_VALUES = [10,20,30,40,50,100];
+
+// ================= FIREBASE =================
+const firebaseConfig = {
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app"
-});
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef",
+  storageBucket: "hpddd-b9bef.appspot.com",
+  messagingSenderId: "520105963434",
+  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+};
+firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-/* ================= CONFIG ================= */
-const START_TIME = Date.UTC(2026,0,13,18,30,0);
-const ROUND_VALUES = [10,20,30,40,50,100];
-const MAIN_TIME = 20;
-const Q_TIME = 10;
+// ================= PLAYER / WATCH =================
+let name = localStorage.getItem('player');
+let watchMode = false;
+if(!name){
+  const n = prompt('Upiši ime (ili WATCH za gledanje)');
+  if(n && n.toUpperCase()==='WATCH') watchMode=true;
+  else { name=n; localStorage.setItem('player',n); }
+}
 
-/* ================= STATE ================= */
-let me = null;
-let watching = false;
+if(!watchMode){ db.ref('players/'+name).set({joined:Date.now()}); }
 
-/* ================= QUESTIONS (60) ================= */
-const questions = [/* ================= KRUG 1 – 10 BODOVA ================= */
-{ text:"Koji je glavni grad Hrvatske?", answers:{A:"Split",B:"Rijeka",C:"Zagreb",D:"Osijek"}, correct:"C", value:10 },
-{ text:"Koliko dana ima prijestupna godina?", answers:{A:"364",B:"365",C:"366",D:"367"}, correct:"C", value:10 },
-{ text:"Koja je najveća planeta Sunčeva sustava?", answers:{A:"Mars",B:"Jupiter",C:"Saturn",D:"Neptun"}, correct:"B", value:10 },
-{ text:"Koja boja nastaje miješanjem plave i žute?", answers:{A:"Ljubičasta",B:"Narančasta",C:"Zelena",D:"Smeđa"}, correct:"C", value:10 },
-{ text:"Koliko kontinenata ima na Zemlji?", answers:{A:"5",B:"6",C:"7",D:"8"}, correct:"C", value:10 },
-{ text:"Koja je valuta u Hrvatskoj od 2023.?", answers:{A:"Kuna",B:"Euro",C:"Dolar",D:"Franak"}, correct:"B", value:10 },
-{ text:"Koji je najveći ocean?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Arktički"}, correct:"C", value:10 },
-{ text:"Koji sport koristi reket?", answers:{A:"Nogomet",B:"Tenis",C:"Rukomet",D:"Vaterpolo"}, correct:"B", value:10 },
-{ text:"Koliko sati ima jedan dan?", answers:{A:"12",B:"18",C:"24",D:"36"}, correct:"C", value:10 },
-{ text:"Koji je kemijski simbol za vodu?", answers:{A:"O2",B:"CO2",C:"H2O",D:"HO"}, correct:"C", value:10 },
+// ================= QUESTIONS =================
+let questions=[];
+fetch('question.json').then(r=>r.json()).then(d=>{
+  Object.values(d.rounds).forEach(r=>r.questions.forEach(q=>questions.push(q)));
+});
 
-/* ================= KRUG 2 – 20 BODOVA ================= */
-{ text:"Koji planet je poznat kao Crveni planet?", answers:{A:"Venera",B:"Mars",C:"Merkur",D:"Saturn"}, correct:"B", value:20 },
-{ text:"Tko je napisao 'Hamleta'?", answers:{A:"Shakespeare",B:"Dante",C:"Goethe",D:"Cervantes"}, correct:"A", value:20 },
-{ text:"Koji je najveći hrvatski otok?", answers:{A:"Krk",B:"Brač",C:"Hvar",D:"Cres"}, correct:"D", value:20 },
-{ text:"Koliko igrača ima nogometna ekipa?", answers:{A:"9",B:"10",C:"11",D:"12"}, correct:"C", value:20 },
-{ text:"Koji plin je potreban za disanje?", answers:{A:"Dušik",B:"Kisik",C:"Ugljik",D:"Vodik"}, correct:"B", value:20 },
-{ text:"Koja država ima najviše stanovnika?", answers:{A:"Indija",B:"SAD",C:"Kina",D:"Rusija"}, correct:"A", value:20 },
-{ text:"Koja je najviša planina na svijetu?", answers:{A:"K2",B:"Everest",C:"Mont Blanc",D:"Kilimanjaro"}, correct:"B", value:20 },
-{ text:"Koji jezik ima najviše izvornih govornika?", answers:{A:"Engleski",B:"Španjolski",C:"Mandarinski",D:"Arapski"}, correct:"C", value:20 },
-{ text:"Koja je najmanja država na svijetu?", answers:{A:"Monako",B:"Vatikan",C:"San Marino",D:"Malta"}, correct:"B", value:20 },
-{ text:"Koliko minuta traje poluvrijeme u nogometu?", answers:{A:"30",B:"40",C:"45",D:"50"}, correct:"C", value:20 },
+let currentIndex=0;
+let phase='wait';
+let answered=false;
+let phaseEnds=0;
 
-/* ================= KRUG 3 – 30 BODOVA ================= */
-{ text:"Koji je autor 'Na Drini ćuprija'?", answers:{A:"Krleža",B:"Andrić",C:"Selimović",D:"Ujević"}, correct:"B", value:30 },
-{ text:"Koji metal ima kemijski simbol Fe?", answers:{A:"Olovo",B:"Bakar",C:"Željezo",D:"Srebro"}, correct:"C", value:30 },
-{ text:"U kojem gradu je Koloseum?", answers:{A:"Atena",B:"Rim",C:"Napulj",D:"Milano"}, correct:"B", value:30 },
-{ text:"Koji je najbrži kopneni sisavac?", answers:{A:"Lav",B:"Leopard",C:"Gepard",D:"Tigar"}, correct:"C", value:30 },
-{ text:"Koja država nije članica EU?", answers:{A:"Švicarska",B:"Italija",C:"Njemačka",D:"Austrija"}, correct:"A", value:30 },
-{ text:"Koji instrument ima tipke i pedale?", answers:{A:"Violina",B:"Gitara",C:"Klavir",D:"Flauta"}, correct:"C", value:30 },
-{ text:"Koji je hrvatski simbol na grbu?", answers:{A:"Zvijezda",B:"Lav",C:"Šahovnica",D:"Orao"}, correct:"C", value:30 },
-{ text:"Koliko žica ima standardna gitara?", answers:{A:"4",B:"5",C:"6",D:"7"}, correct:"C", value:30 },
-{ text:"Koja rijeka protječe kroz Pariz?", answers:{A:"Temza",B:"Seina",C:"Rajna",D:"Loara"}, correct:"B", value:30 },
-{ text:"Koji kontinent je najsuši?", answers:{A:"Afrika",B:"Australija",C:"Antarktika",D:"Azija"}, correct:"C", value:30 },
+// ================= SCORING =================
+function calc(type,correct,val){
+  if(type==='!') return correct?val:-val;
+  if(type==='?') return correct?val/2:-val/2;
+  if(type==='.') return correct?val/2:0;
+  return 0;
+}
 
-/* ================= KRUG 4 – 40 BODOVA ================= */
-{ text:"Koje godine je Hrvatska postala članica EU?", answers:{A:"2011",B:"2012",C:"2013",D:"2014"}, correct:"C", value:40 },
-{ text:"Tko je oslikao Mona Lisu?", answers:{A:"Michelangelo",B:"Leonardo da Vinci",C:"Rafael",D:"Donatello"}, correct:"B", value:40 },
-{ text:"Koji je najveći unutarnji organ čovjeka?", answers:{A:"Pluća",B:"Mozak",C:"Jetra",D:"Srce"}, correct:"C", value:40 },
-{ text:"Koja država ima oblik čizme?", answers:{A:"Portugal",B:"Španjolska",C:"Italija",D:"Grčka"}, correct:"C", value:40 },
-{ text:"Koji je glavni grad Kanade?", answers:{A:"Toronto",B:"Vancouver",C:"Ottawa",D:"Montreal"}, correct:"C", value:40 },
-{ text:"Koji znanstvenik je razvio teoriju relativnosti?", answers:{A:"Newton",B:"Tesla",C:"Einstein",D:"Galileo"}, correct:"C", value:40 },
-{ text:"Koji je najdublji ocean?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Arktički"}, correct:"C", value:40 },
-{ text:"Koji hrvatski grad zovu Grad heroj?", answers:{A:"Knin",B:"Vukovar",C:"Sisak",D:"Zadar"}, correct:"B", value:40 },
-{ text:"Koliko stranica ima kocka?", answers:{A:"4",B:"5",C:"6",D:"8"}, correct:"C", value:40 },
-{ text:"Koja je valuta Japana?", answers:{A:"Yuan",B:"Won",C:"Jen",D:"Baht"}, correct:"C", value:40 },
+// ================= RENDER ANSWERS =================
+function renderAnswers(q,questionPhase){
+  const div=document.getElementById('answers');
+  div.innerHTML=''; div.classList.remove('locked'); answered=false;
 
-/* ================= KRUG 5 – 50 BODOVA ================= */
-{ text:"Koji je najviši aktivni vulkan?", answers:{A:"Etna",B:"Mauna Loa",C:"Ojos del Salado",D:"Vezuv"}, correct:"C", value:50 },
-{ text:"Koji je najduži živac u ljudskom tijelu?", answers:{A:"Vagus",B:"Sijatični",C:"Facijalni",D:"Optički"}, correct:"B", value:50 },
-{ text:"Koja država ima najviše otoka?", answers:{A:"Hrvatska",B:"Indonezija",C:"Švedska",D:"Filipini"}, correct:"C", value:50 },
-{ text:"Tko je bio prvi čovjek na Mjesecu?", answers:{A:"Aldrin",B:"Armstrong",C:"Gagarin",D:"Collins"}, correct:"B", value:50 },
-{ text:"Koji je glavni grad Australije?", answers:{A:"Sydney",B:"Melbourne",C:"Canberra",D:"Perth"}, correct:"C", value:50 },
-{ text:"Koji element ima simbol Au?", answers:{A:"Srebro",B:"Zlato",C:"Bakar",D:"Aluminij"}, correct:"B", value:50 },
-{ text:"Koji je najbrži ptica na svijetu?", answers:{A:"Orao",B:"Sokol",C:"Noj",D:"Albatros"}, correct:"B", value:50 },
-{ text:"Koji je najdublji jezer na svijetu?", answers:{A:"Tanganjika",B:"Kaspijsko",C:"Bajkalsko",D:"Superior"}, correct:"C", value:50 },
-{ text:"Koja država ima najviše Nobelovaca?", answers:{A:"Njemačka",B:"SAD",C:"UK",D:"Francuska"}, correct:"B", value:50 },
-{ text:"Koji je kemijski simbol za natrij?", answers:{A:"Na",B:"N",C:"Ni",D:"Ne"}, correct:"A", value:50 },
+  if(questionPhase==='main'){
+    ['A','B','C','D'].forEach(l=>{
+      ['!','.'].forEach(t=>{
+        const b=document.createElement('button');
+        b.className=l.toLowerCase(); b.innerText=l+t+' – '+q.answers[l];
+        b.onclick=()=>send(l+t);
+        div.appendChild(b);
+      });
+    });
+    const qb=document.createElement('button'); qb.className='q'; qb.innerText='? LUKAVAC'; qb.onclick=()=>send('?'); div.appendChild(qb);
+  }
 
-/* ================= KRUG 6 – 100 BODOVA ================= */
-{ text:"Koje godine je pao Berlinski zid?", answers:{A:"1987",B:"1988",C:"1989",D:"1990"}, correct:"C", value:100 },
-{ text:"Koji je najstariji poznati pisani ep?", answers:{A:"Ilijada",B:"Epa o Gilgamešu",C:"Odiseja",D:"Mahabharata"}, correct:"B", value:100 },
-{ text:"Koja država je prva uvela opće pravo glasa ženama?", answers:{A:"SAD",B:"Norveška",C:"Novi Zeland",D:"Finska"}, correct:"C", value:100 },
-{ text:"Koji je najveći broj u rimskoj numeraciji?", answers:{A:"M",B:"V",C:"L",D:"C"}, correct:"A", value:100 },
-{ text:"Koji znanstvenik je otkrio penicilin?", answers:{A:"Pasteur",B:"Fleming",C:"Curie",D:"Koch"}, correct:"B", value:100 },
-{ text:"Koji je glavni grad Brazila?", answers:{A:"Rio",B:"Sao Paulo",C:"Brasilia",D:"Salvador"}, correct:"C", value:100 },
-{ text:"Koji ocean je najtopliji?", answers:{A:"Atlantski",B:"Indijski",C:"Tihi",D:"Južni"}, correct:"B", value:100 },
-{ text:"Koji je najrjeđi krvni tip?", answers:{A:"0-",B:"AB-",C:"B-",D:"A-"}, correct:"B", value:100 },
-{ text:"Koji je najteži prirodni element?", answers:{A:"Uran",B:"Plutonij",C:"Osmij",D:"Radij"}, correct:"C", value:100 },
-{ text:"Koji je hrvatski nobelovac?", answers:{A:"Tesla",B:"Ruđjer Bošković",C:"Andrić",D:"Prelog"}, correct:"D", value:100 }
-
-];
-for (let r=0;r<6;r++) {
-  for (let i=1;i<=10;i++) {
-    questions.push({
-      text:`Pitanje ${r+1}.${i}: Koji je točan odgovor?`,
-      answers:{A:"Odgovor A",B:"Odgovor B",C:"Odgovor C",D:"Odgovor D"},
-      correct:["A","B","C","D"][i%4],
-      value:ROUND_VALUES[r]
+  if(questionPhase==='qphase'){
+    ['A','B','C','D'].forEach(l=>{
+      const b=document.createElement('button'); b.className=l.toLowerCase(); b.innerText=l+'? – '+q.answers[l]; b.onclick=()=>send(l+'?'); div.appendChild(b);
     });
   }
 }
 
-/* ================= JOIN ================= */
-function join(){
-  const n=document.getElementById("name").value.trim();
-  if(!n) watching=true;
-  else me=n;
-
-  document.getElementById("join").style.display="none";
-  document.getElementById("game").style.display="block";
+function send(choice){
+  if(answered||watchMode) return;
+  answered=true;
+  db.ref(`answers/${currentIndex}/${name}`).set({choice,time:Date.now()});
+  document.getElementById('answers').classList.add('locked');
 }
 
-/* ================= GAME LOOP ================= */
-db.ref("state").on("value",snap=>{
-  const s=snap.val();
-  if(!s) return;
-
-  document.getElementById("question").innerText=s.text||"";
-  document.getElementById("timer").innerText=s.remaining+"s";
-
-  renderAnswers(s);
-});
-
-function renderAnswers(s){
-  const div=document.getElementById("answers");
-  div.innerHTML="";
-
-  if(watching) return;
-
-  if(s.phase==="main"){
-    ["A","B","C","D","!","?"].forEach(x=>{
-      btn(x);
-    });
-  }
-  if(s.phase==="q"){
-    ["A?","B?","C?","D?"].forEach(x=>{
-      btn(x);
-    });
-  }
-
-  function btn(x){
-    const b=document.createElement("button");
-    b.innerText=x;
-    b.onclick=()=>answer(x);
-    div.appendChild(b);
-  }
-}
-
-function answer(a){
-  if(!me) return;
-  db.ref("answers/"+me).set({
-    a,
-    t:Date.now()
-  });
-}
-
-/* ================= LEADERBOARD ================= */
-db.ref("scores").on("value",snap=>{
-  let arr=[];
-  snap.forEach(c=>arr.push({n:c.key,...c.val()}));
-
-  arr.sort((a,b)=>{
-    if(a.points!==b.points) return b.points-a.points;
-    if(a.q!==b.q) return b.q-a.q;
-    if(a.ex!==b.ex) return b.ex-a.ex;
-    return a.time-b.time;
-  });
-
-  let html="<tr><th>#</th><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th><th>Vrijeme</th></tr>";
-  arr.forEach((p,i)=>{
-    html+=`<tr><td>${i+1}</td><td>${p.n}</td><td>${p.points}</td><td>${p.q}</td><td>${p.ex}</td><td>${p.time}</td></tr>`;
-  });
-  document.getElementById("board").innerHTML=html;
-});
-
-/* ================= LIVE ANSWERS ================= */
-db.ref("answers").on("value",snap=>{
-  let txt="LIVE: ";
-  snap.forEach(c=>{
-    txt+=`${c.key}:${c.val().a} `;
-  });
-  document.getElementById("live").innerText=txt;
-});
-
-/* ================= TIMER DRIVER ================= */
+// ================= GAME LOOP =================
 setInterval(()=>{
   const now=Date.now();
   if(now<START_TIME) return;
 
-  db.ref("engine").transaction(e=>{
-    if(!e) return {i:0,phase:"main",ends:now+20000};
+  const total=questions.length;
+  const q=questions[currentIndex];
+  if(!q) return;
 
-    if(now>e.ends){
-      if(e.phase==="main") return {...e,phase:"q",ends:now+10000};
-      if(e.phase==="q") return {...e,phase:"reveal",ends:now+5000};
-      return {i:e.i+1,phase:"main",ends:now+20000};
-    }
-    return e;
-  });
+  if(phase==='wait'){
+    phase='main'; phaseEnds=now+20000;
+    renderAnswers(q,'main');
+    document.getElementById('question').innerText=q.text;
+  }
+
+  if(phase==='main' && now>phaseEnds){
+    phase='qphase'; phaseEnds=now+10000;
+    renderAnswers(q,'qphase');
+  }
+
+  if(phase==='qphase' && now>phaseEnds){
+    phase='reveal'; phaseEnds=now+10000;
+    reveal(q);
+  }
+
+  if(phase==='reveal' && now>phaseEnds){
+    currentIndex++; phase='wait';
+  }
+
+  document.getElementById('timer').innerText=Math.max(0,Math.ceil((phaseEnds-now)/1000));
+  document.getElementById('roundInfo').innerText=`Pitanje ${currentIndex+1}/${total}`;
 },1000);
 
-/* ================= SYNC STATE ================= */
-db.ref("engine").on("value",snap=>{
-  const e=snap.val();
-  if(!e||!questions[e.i]) return;
-
-  const rem=Math.max(0,Math.ceil((e.ends-Date.now())/1000));
-
-  db.ref("state").set({
-    phase:e.phase,
-    text:questions[e.i].text,
-    remaining:rem
+// ================= LIVE ANSWERS =================
+db.ref('answers').on('value',snap=>{
+  let txt='';
+  snap.forEach(q=>{
+    q.forEach(p=>{ txt+=`${p.key}: ${p.val().choice} | `; });
   });
+  document.getElementById('live').innerText=txt;
+});
+
+// ================= REVEAL + LEADERBOARD =================
+function reveal(q){
+  const val=ROUND_VALUES[Math.floor(currentIndex/10)]||10;
+  db.ref(`answers/${currentIndex}`).once('value',snap=>{
+    snap.forEach(p=>{
+      const c=p.val().choice; if(!c||c==='?') return;
+      const l=c[0], t=c[1];
+      const pts=calc(t,l===q.correct,val);
+      db.ref('results/'+p.key).transaction(r=>{
+        if(!r) r={points:0,q:0,ex:0,time:0};
+        r.points+=pts; if(t==='?')r.q++; if(t==='!')r.ex++; return r;
+      });
+    });
+  });
+}
+
+db.ref('results').on('value',snap=>{
+  let arr=[]; snap.forEach(c=>arr.push({n:c.key,...c.val()}));
+  arr.sort((a,b)=>b.points-a.points||b.q-a.q||b.ex-a.ex||a.time-b.time);
+  let h='<table><tr><th>#</th><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th></tr>';
+  arr.forEach((p,i)=>h+=`<tr><td>${i+1}</td><td>${p.n}</td><td>${p.points}</td><td>${p.q||0}</td><td>${p.ex||0}</td></tr>`);
+  document.getElementById('leader').innerHTML=h+'</table>';
 });
 </script>
-
 </body>
 </html>
