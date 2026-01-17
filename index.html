@@ -2,161 +2,167 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>LIVE KVIZ</title>
+<title>Kviz</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body { background:#111; color:white; font-family:Arial; text-align:center; }
-button { width:90%; max-width:420px; padding:14px; margin:6px; font-size:18px; }
-.answer { background:#222; color:white; }
-.answer:hover { background:#333; }
-.hidden { display:none; }
-span { margin:4px; display:inline-block; background:#333; padding:4px 8px; }
+body {
+  background:#111;
+  color:#fff;
+  font-family:Arial;
+  text-align:center;
+}
+#timer {
+  font-size:48px;
+  color:yellow;
+  margin:20px;
+}
+.answers button {
+  width:140px;
+  height:60px;
+  font-size:22px;
+  margin:6px;
+}
+#live span {
+  display:block;
+  font-size:18px;
+  margin:2px;
+}
+.locked button {
+  opacity:0.4;
+  pointer-events:none;
+}
 </style>
 </head>
-
 <body>
 
-<h1>LIVE KVIZ</h1>
+<h2 id="status">Čekanje početka kviza…</h2>
+<div id="timer">--</div>
 
-<div id="join">
-  <input id="name" placeholder="Ime" />
-  <br><br>
-  <button onclick="join()">ULAZ</button>
-  <button onclick="watch=true;startUI()">WATCH</button>
-</div>
+<h3 id="question"></h3>
 
-<div id="quiz" class="hidden">
-  <h2 id="round"></h2>
-  <h2 id="question"></h2>
-  <div id="answers"></div>
-  <h3 id="timer"></h3>
-  <div id="live"></div>
-</div>
+<div class="answers" id="answers"></div>
+
+<h3>LIVE ODGOVORI</h3>
+<div id="live"></div>
 
 <script>
-/* ================= FIREBASE ================= */
+// ================== FIREBASE ==================
 firebase.initializeApp({
-  apiKey: "API_KEY",
-  authDomain: "PROJECT.firebaseapp.com",
-  databaseURL: "https://PROJECT-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "PROJECT"
+  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
+  authDomain: "hpddd-b9bef.firebaseapp.com",
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "hpddd-b9bef"
 });
 const db = firebase.database();
 
-/* ================= START TIME ================= */
-const START = new Date("2026-01-13T18:30:00+01:00");
+// ================== POSTAVKE ==================
+const QUIZ_START = new Date("2026-01-13T18:30:00+01:00").getTime();
+const MAIN_TIME = 20; // sekundi
+const QMARK_TIME = 10;
 
-/* ================= STATE ================= */
-let player=null, watch=false, index=0, phase="main", ends=0;
+// TEST PITANJE (kasnije ide 60)
+const QUESTIONS = [{
+  text: "Koji je glavni grad Hrvatske?",
+  answers: ["Split","Rijeka","Zagreb","Osijek"],
+  correct: 2
+}];
 
-/* ================= QUESTIONS (60) ================= */
-const values=[10,20,30,40,50,100];
-const QUESTIONS=[
+// ================== IGRAČ ==================
+const player = localStorage.player || prompt("Ime igrača");
+localStorage.player = player;
+db.ref("players/"+player).set(true);
 
-/* KRUG 1 */
-{q:"Glavni grad Hrvatske?",a:["Split","Rijeka","Zagreb","Osijek"],c:2,v:10},
-{q:"Prijestupna godina ima?",a:["365","366","364","367"],c:1,v:10},
-{q:"Najveća rijeka u Hrvatskoj?",a:["Drava","Sava","Dunav","Kupa"],c:2,v:10},
-{q:"Boja neba?",a:["Zelena","Plava","Crvena","Žuta"],c:1,v:10},
-{q:"Koliko dana ima tjedan?",a:["5","6","7","8"],c:2,v:10},
-{q:"Glavni grad Francuske?",a:["Berlin","Madrid","Pariz","Rim"],c:2,v:10},
-{q:"2+2=?",a:["3","4","5","6"],c:1,v:10},
-{q:"More u Hrvatskoj?",a:["Crno","Jadransko","Baltičko","Sjeverno"],c:1,v:10},
-{q:"Koliko slova ima abeceda?",a:["28","30","26","25"],c:0,v:10},
-{q:"Sunce je?",a:["Planet","Zvijezda","Mjesec","Satelit"],c:1,v:10},
+// ================== STATE ==================
+let phase = "wait";
+let answered = false;
+let qIndex = 0;
 
-/* KRUG 2 */
-{q:"Najveći kontinent?",a:["Europa","Afrika","Azija","Amerika"],c:2,v:20},
-{q:"Autor Hamleta?",a:["Shakespeare","Dante","Goethe","Kafka"],c:0,v:20},
-{q:"Kemijski simbol vode?",a:["O2","H2","CO2","H2O"],c:3,v:20},
-{q:"Godina ulaska HR u EU?",a:["2011","2013","2015","2017"],c:1,v:20},
-{q:"Najviša planina HR?",a:["Velebit","Dinara","Biokovo","Učka"],c:1,v:20},
-{q:"Broj igrača u nogometu?",a:["9","10","11","12"],c:2,v:20},
-{q:"Glavni grad Italije?",a:["Milano","Napulj","Rim","Torino"],c:2,v:20},
-{q:"Valuta Hrvatske?",a:["Euro","Kuna","Dolar","Funta"],c:0,v:20},
-{q:"Najduža rijeka Europe?",a:["Rajna","Dunav","Volga","Sena"],c:2,v:20},
-{q:"Najveći ocean?",a:["Atlantski","Indijski","Tihi","Arktički"],c:2,v:20},
-
-/* KRUG 3–6: (spremno, skraćeno radi čitljivosti) */
-/* U stvarnoj verziji ovdje ide ISTO 60 – sad logika je gotova */
-
-];
-
-/* ================= JOIN ================= */
-function join(){
-  player=document.getElementById("name").value.trim();
-  if(!player)return alert("Ime!");
-  db.ref("players/"+player).set({points:0,time:0});
-  startUI();
-}
-function startUI(){
-  document.getElementById("join").classList.add("hidden");
-  document.getElementById("quiz").classList.remove("hidden");
+// ================== TIMER ==================
+function startTimer(sec, cb){
+  let t = sec;
+  document.getElementById("timer").innerText = t;
+  const i = setInterval(()=>{
+    t--;
+    document.getElementById("timer").innerText = t;
+    if(t<=0){
+      clearInterval(i);
+      cb();
+    }
+  },1000);
 }
 
-/* ================= TIMER ================= */
+// ================== START ==================
 setInterval(()=>{
-  if(new Date()<START)return;
-  db.ref("game").once("value",s=>{
-    if(!s.exists()) next();
-  });
+  if(Date.now() >= QUIZ_START && phase==="wait"){
+    startMain();
+  }
 },1000);
 
-/* ================= NEXT ================= */
-function next(){
-  if(index>=QUESTIONS.length)return;
+// ================== FAZE ==================
+function startMain(){
   phase="main";
-  ends=Date.now()+20000;
-  db.ref("game").set({index,phase,ends});
-  setTimeout(()=>{phase="?";ends=Date.now()+10000;db.ref("game").update({phase,ends});},20000);
-  setTimeout(()=>{index++;next();},30000);
+  answered=false;
+  document.getElementById("status").innerText="GLAVNA FAZA";
+  document.getElementById("question").innerText=QUESTIONS[qIndex].text;
+  renderAnswers(["A!","B!","C!","D!","?"]);
+  startTimer(MAIN_TIME, endMain);
 }
 
-/* ================= LISTENER ================= */
-db.ref("game").on("value",s=>{
-  if(!s.exists())return;
-  index=s.val().index;
-  phase=s.val().phase;
-  ends=s.val().ends;
-  render();
-});
+function endMain(){
+  phase="live";
+  document.getElementById("status").innerText="LIVE PRIKAZ";
+  showLive();
+  startTimer(5, startQmark);
+}
 
-/* ================= RENDER ================= */
-function render(){
-  const q=QUESTIONS[index];
-  if(!q)return;
-  document.getElementById("round").innerText=`Vrijednost ${q.v}`;
-  document.getElementById("question").innerText=q.q;
-  const box=document.getElementById("answers"); box.innerHTML="";
-  q.a.forEach((t,i)=>{
+function startQmark(){
+  phase="qmark";
+  document.getElementById("status").innerText="? FAZA";
+  renderAnswers(["A?","B?","C?","D?"]);
+  startTimer(QMARK_TIME, reveal);
+}
+
+function reveal(){
+  phase="reveal";
+  document.getElementById("status").innerText="TOČAN ODGOVOR JE: "+
+    ["A","B","C","D"][QUESTIONS[qIndex].correct];
+}
+
+// ================== ODGOVORI ==================
+function renderAnswers(arr){
+  const d=document.getElementById("answers");
+  d.innerHTML="";
+  d.classList.remove("locked");
+  arr.forEach(a=>{
     const b=document.createElement("button");
-    b.className="answer";
-    b.innerText=String.fromCharCode(65+i)+t;
-    b.onclick=()=>answer(i);
-    if(watch)b.disabled=true;
-    box.appendChild(b);
+    b.innerText=a;
+    b.onclick=()=>submit(a);
+    d.appendChild(b);
   });
 }
 
-/* ================= ANSWER ================= */
-function answer(i){
-  if(!player)return;
-  db.ref("answers/"+index+"/"+player).set({a:i,p:phase});
+function submit(v){
+  if(answered) return;
+  answered=true;
+  document.getElementById("answers").classList.add("locked");
+  db.ref("answers/"+qIndex+"/"+player).set(v);
 }
 
-/* ================= LIVE ================= */
-db.ref("answers").on("value",s=>{
-  const l=document.getElementById("live"); l.innerHTML="";
-  const c=s.child(index);
-  c.forEach(p=>{
-    const sp=document.createElement("span");
-    sp.innerText=p.key+" → "+String.fromCharCode(65+p.val().a);
-    l.appendChild(sp);
+// ================== LIVE PRIKAZ ==================
+function showLive(){
+  db.ref("answers/"+qIndex).once("value", snap=>{
+    const l=document.getElementById("live");
+    l.innerHTML="";
+    snap.forEach(p=>{
+      const s=document.createElement("span");
+      s.innerText=p.key+" → "+p.val();
+      l.appendChild(s);
+    });
   });
-});
+}
 </script>
 </body>
 </html>
