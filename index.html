@@ -2,167 +2,191 @@
 <html lang="hr">
 <head>
 <meta charset="UTF-8">
-<title>Kviz</title>
+<title>Kviz – test bodovanja</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body {
-  background:#111;
-  color:#fff;
-  font-family:Arial;
-  text-align:center;
+body { font-family: Arial; background:#111; color:#fff; text-align:center; }
+#timer { font-size:48px; margin:20px; color:yellow; }
+#answers button {
+  width:120px; height:60px; font-size:20px; margin:5px;
 }
-#timer {
-  font-size:48px;
-  color:yellow;
-  margin:20px;
-}
-.answers button {
-  width:140px;
-  height:60px;
-  font-size:22px;
-  margin:6px;
-}
-#live span {
-  display:block;
-  font-size:18px;
-  margin:2px;
-}
-.locked button {
-  opacity:0.4;
-  pointer-events:none;
-}
+table { margin:auto; border-collapse:collapse; }
+td,th { border:1px solid #555; padding:6px 10px; }
 </style>
 </head>
+
 <body>
 
-<h2 id="status">Čekanje početka kviza…</h2>
+<h2 id="question">Čekanje...</h2>
 <div id="timer">--</div>
 
-<h3 id="question"></h3>
+<div id="answers"></div>
 
-<div class="answers" id="answers"></div>
-
-<h3>LIVE ODGOVORI</h3>
+<h3>Odgovori igrača</h3>
 <div id="live"></div>
 
+<h3>Leaderboard</h3>
+<table id="board"></table>
+
 <script>
-// ================== FIREBASE ==================
+// ================= FIREBASE =================
 firebase.initializeApp({
   apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef"
+  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app"
 });
 const db = firebase.database();
 
-// ================== POSTAVKE ==================
-const QUIZ_START = new Date("2026-01-13T18:30:00+01:00").getTime();
-const MAIN_TIME = 20; // sekundi
-const QMARK_TIME = 10;
-
-// TEST PITANJE (kasnije ide 60)
-const QUESTIONS = [{
-  text: "Koji je glavni grad Hrvatske?",
-  answers: ["Split","Rijeka","Zagreb","Osijek"],
-  correct: 2
-}];
-
-// ================== IGRAČ ==================
-const player = localStorage.player || prompt("Ime igrača");
-localStorage.player = player;
-db.ref("players/"+player).set(true);
-
-// ================== STATE ==================
-let phase = "wait";
-let answered = false;
-let qIndex = 0;
-
-// ================== TIMER ==================
-function startTimer(sec, cb){
-  let t = sec;
-  document.getElementById("timer").innerText = t;
-  const i = setInterval(()=>{
-    t--;
-    document.getElementById("timer").innerText = t;
-    if(t<=0){
-      clearInterval(i);
-      cb();
-    }
-  },1000);
+// ================= PLAYER =================
+let player = localStorage.getItem("player");
+if (!player) {
+  player = prompt("Ime igrača");
+  localStorage.setItem("player", player);
 }
+db.ref("players/"+player).set({ joined: Date.now() });
 
-// ================== START ==================
-setInterval(()=>{
-  if(Date.now() >= QUIZ_START && phase==="wait"){
-    startMain();
+// ================= QUESTIONS (TEST) =================
+const questions = [
+  {
+    text: "Glavni grad Hrvatske?",
+    correct: "C",
+    value: 10,
+    answers: {A:"Split",B:"Rijeka",C:"Zagreb",D:"Osijek"}
+  },
+  {
+    text: "Koliko dana ima prijestupna godina?",
+    correct: "C",
+    value: 20,
+    answers: {A:"365",B:"364",C:"366",D:"367"}
+  },
+  {
+    text: "Crveni planet?",
+    correct: "B",
+    value: 30,
+    answers: {A:"Venera",B:"Mars",C:"Jupiter",D:"Saturn"}
   }
-},1000);
+];
 
-// ================== FAZE ==================
-function startMain(){
-  phase="main";
-  answered=false;
-  document.getElementById("status").innerText="GLAVNA FAZA";
-  document.getElementById("question").innerText=QUESTIONS[qIndex].text;
-  renderAnswers(["A!","B!","C!","D!","?"]);
-  startTimer(MAIN_TIME, endMain);
-}
+let qIndex = 0;
+let answered = false;
 
-function endMain(){
-  phase="live";
-  document.getElementById("status").innerText="LIVE PRIKAZ";
-  showLive();
-  startTimer(5, startQmark);
-}
-
-function startQmark(){
-  phase="qmark";
-  document.getElementById("status").innerText="? FAZA";
-  renderAnswers(["A?","B?","C?","D?"]);
-  startTimer(QMARK_TIME, reveal);
-}
-
-function reveal(){
-  phase="reveal";
-  document.getElementById("status").innerText="TOČAN ODGOVOR JE: "+
-    ["A","B","C","D"][QUESTIONS[qIndex].correct];
-}
-
-// ================== ODGOVORI ==================
-function renderAnswers(arr){
-  const d=document.getElementById("answers");
-  d.innerHTML="";
-  d.classList.remove("locked");
-  arr.forEach(a=>{
-    const b=document.createElement("button");
-    b.innerText=a;
-    b.onclick=()=>submit(a);
-    d.appendChild(b);
+// ================= START GAME =================
+if (!localStorage.getItem("started")) {
+  db.ref("game").set({
+    q: 0,
+    phase: "question",
+    ends: Date.now() + 20000
   });
+  localStorage.setItem("started","1");
 }
 
-function submit(v){
-  if(answered) return;
-  answered=true;
-  document.getElementById("answers").classList.add("locked");
-  db.ref("answers/"+qIndex+"/"+player).set(v);
-}
-
-// ================== LIVE PRIKAZ ==================
-function showLive(){
-  db.ref("answers/"+qIndex).once("value", snap=>{
-    const l=document.getElementById("live");
-    l.innerHTML="";
-    snap.forEach(p=>{
-      const s=document.createElement("span");
-      s.innerText=p.key+" → "+p.val();
-      l.appendChild(s);
+// ================= RENDER =================
+function render(q) {
+  document.getElementById("question").innerText = q.text;
+  const a = document.getElementById("answers");
+  a.innerHTML = "";
+  ["A","B","C","D"].forEach(l=>{
+    ["!","?","."].forEach(t=>{
+      const b=document.createElement("button");
+      b.textContent = l+t;
+      b.onclick=()=>submit(l,t);
+      a.appendChild(b);
     });
   });
 }
+
+function submit(letter,type){
+  if (answered) return;
+  answered = true;
+  db.ref(`answers/${qIndex}/${player}`).set({
+    letter, type, time: Date.now()
+  });
+}
+
+// ================= GAME LOOP =================
+db.ref("game").on("value", snap=>{
+  const g = snap.val();
+  if (!g) return;
+
+  const q = questions[g.q];
+  render(q);
+  answered = false;
+
+  clearInterval(window.t);
+  window.t = setInterval(()=>{
+    const left = Math.max(0, Math.ceil((g.ends-Date.now())/1000));
+    document.getElementById("timer").innerText = left;
+    if (left===0) reveal();
+  },1000);
+});
+
+// ================= REVEAL + BODOVI =================
+function reveal(){
+  const q = questions[qIndex];
+  db.ref(`answers/${qIndex}`).once("value", snap=>{
+    snap.forEach(p=>{
+      const {letter,type,time} = p.val();
+      const correct = letter===q.correct;
+      let delta = 0;
+
+      if (type==="!") delta = correct ? q.value : -q.value;
+      if (type===".") delta = correct ? q.value/2 : 0;
+      if (type==="?") delta = correct ? q.value/2 : -q.value/2;
+
+      db.ref("results/"+p.key).transaction(r=>{
+        if(!r) r={points:0,q:0,ex:0,time:0};
+        r.points += delta;
+        if(type==="?") r.q++;
+        if(type==="!") r.ex++;
+        r.time += (Date.now()-time)/1000;
+        return r;
+      });
+    });
+
+    qIndex++;
+    if (qIndex < questions.length) {
+      db.ref("game").set({
+        q: qIndex,
+        phase:"question",
+        ends: Date.now()+20000
+      });
+    }
+  });
+}
+
+// ================= LIVE ANSWERS =================
+db.ref("answers").on("value", snap=>{
+  let html="";
+  snap.forEach(q=>{
+    q.forEach(p=>{
+      html+=`${p.key}: ${p.val().letter}${p.val().type}<br>`;
+    });
+  });
+  document.getElementById("live").innerHTML=html;
+});
+
+// ================= LEADERBOARD =================
+db.ref("results").on("value", snap=>{
+  let arr=[];
+  snap.forEach(p=>{
+    arr.push({name:p.key,...p.val()});
+  });
+
+  arr.sort((a,b)=>{
+    if(a.points!==b.points) return b.points-a.points;
+    if(a.q!==b.q) return b.q-a.q;
+    if(a.ex!==b.ex) return b.ex-a.ex;
+    return a.time-b.time;
+  });
+
+  let html="<tr><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th><th>Vrijeme</th></tr>";
+  arr.forEach(p=>{
+    html+=`<tr><td>${p.name}</td><td>${p.points}</td><td>${p.q}</td><td>${p.ex}</td><td>${p.time.toFixed(1)}</td></tr>`;
+  });
+  document.getElementById("board").innerHTML=html;
+});
 </script>
 </body>
 </html>
