@@ -1,185 +1,217 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-<meta charset="UTF-8">
-<title>Kviz – Live Multiplayer</title>
+<meta charset="UTF-8" />
+<title>LIVE KVIZ</title>
+
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
-body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
-#top{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;font-size:20px}
-#timer{font-size:48px;color:yellow}
-#question{font-size:28px;margin:20px}
-#answers{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:500px;margin:20px auto}
-button{font-size:22px;padding:18px;border-radius:8px;border:none;cursor:pointer}
-.a{background:#1e90ff}.b{background:#e67e22}.c{background:#2ecc71}.d{background:#9b59b6}
-.q{background:#555}
-.locked button{opacity:.4;pointer-events:none}
-#live{margin-top:20px;font-size:16px;opacity:.9}
-#leader{margin-top:30px}
-table{width:90%;margin:auto;border-collapse:collapse}
-th,td{border:1px solid #444;padding:6px}
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: white;
+  text-align: center;
+}
+
+.hidden { display: none; }
+
+button {
+  padding: 14px;
+  margin: 6px;
+  font-size: 18px;
+  cursor: pointer;
+  width: 80%;
+  max-width: 400px;
+}
+
+.answer { background:#222; color:white; }
+.answer:hover { background:#333; }
+
+#players span {
+  display: inline-block;
+  margin: 4px;
+  padding: 4px 8px;
+  background: #333;
+}
 </style>
 </head>
+
 <body>
 
-<div id="top">
-  <div id="roundInfo">Krug 1 / Pitanje 1</div>
-  <div id="timer">--</div>
+<h1>LIVE KVIZ</h1>
+
+<div id="waiting">
+  <h2 id="countdown">Kviz još nije počeo</h2>
 </div>
 
-<div id="question">Čekanje početka kviza…</div>
+<div id="join">
+  <input id="playerName" placeholder="Ime igrača" />
+  <br><br>
+  <button onclick="joinGame()">ULAZ</button>
+  <button onclick="watchMode()">WATCH MODE</button>
+</div>
 
-<div id="answers"></div>
-
-<div id="live"></div>
-
-<div id="leader"></div>
+<div id="quiz" class="hidden">
+  <h2 id="roundInfo"></h2>
+  <h2 id="questionText"></h2>
+  <div id="answers"></div>
+  <h3 id="timer"></h3>
+  <div id="players"></div>
+</div>
 
 <script>
-// ================= CONFIG =================
-const START_TIME = new Date('2026-01-14T22:54:00Z').getTime();
-const ROUND_VALUES = [10,20,30,40,50,100];
-
-// ================= FIREBASE =================
+/* ================= FIREBASE ================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyB5jeu860fNmmysc51wcb5fej7Bz_6gW-Q",
-  authDomain: "hpddd-b9bef.firebaseapp.com",
-  databaseURL: "https://hpddd-b9bef-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "hpddd-b9bef",
-  storageBucket: "hpddd-b9bef.appspot.com",
-  messagingSenderId: "520105963434",
-  appId: "1:520105963434:web:5b25d1f9f28512ae1145d3"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "YOUR_PROJECT"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ================= PLAYER / WATCH =================
-let name = localStorage.getItem('player');
-let watchMode = false;
-if(!name){
-  const n = prompt('Upiši ime (ili WATCH za gledanje)');
-  if(n && n.toUpperCase()==='WATCH') watchMode=true;
-  else { name=n; localStorage.setItem('player',n); }
-}
+/* ================= QUIZ TIME ================= */
+const QUIZ_START = new Date("2026-01-13T17:30:00Z");
+let started = false;
 
-if(!watchMode){ db.ref('players/'+name).set({joined:Date.now()}); }
+/* ================= GAME DATA ================= */
+let player = null;
+let watch = false;
+let currentIndex = 0;
+let phase = "waiting";
 
-// ================= QUESTIONS =================
-let questions=[];
-fetch('question.json').then(r=>r.json()).then(d=>{
-  Object.values(d.rounds).forEach(r=>r.questions.forEach(q=>questions.push(q)));
-});
+/* ================= QUESTIONS ================= */
+/* OVDJE UBACIŠ SVIH 60 PITANJA */
+const QUESTIONS = [
+  {
+    round: 1,
+    value: 10,
+    text: "Koji je glavni grad Hrvatske?",
+    answers: { A:"Split", B:"Rijeka", C:"Zagreb", D:"Osijek" },
+    correct: "C"
+  },
+  {
+    round: 1,
+    value: 10,
+    text: "Koliko dana ima prijestupna godina?",
+    answers: { A:"365", B:"366", C:"364", D:"367" },
+    correct: "B"
+  }
+  // ← nastavi do 60
+];
 
-let currentIndex=0;
-let phase='wait';
-let answered=false;
-let phaseEnds=0;
+/* ================= TIMER ================= */
+setInterval(() => {
+  const now = new Date();
+  const diff = QUIZ_START - now;
 
-// ================= SCORING =================
-function calc(type,correct,val){
-  if(type==='!') return correct?val:-val;
-  if(type==='?') return correct?val/2:-val/2;
-  if(type==='.') return correct?val/2:0;
-  return 0;
-}
-
-// ================= RENDER ANSWERS =================
-function renderAnswers(q,questionPhase){
-  const div=document.getElementById('answers');
-  div.innerHTML=''; div.classList.remove('locked'); answered=false;
-
-  if(questionPhase==='main'){
-    ['A','B','C','D'].forEach(l=>{
-      ['!','.'].forEach(t=>{
-        const b=document.createElement('button');
-        b.className=l.toLowerCase(); b.innerText=l+t+' – '+q.answers[l];
-        b.onclick=()=>send(l+t);
-        div.appendChild(b);
-      });
-    });
-    const qb=document.createElement('button'); qb.className='q'; qb.innerText='? LUKAVAC'; qb.onclick=()=>send('?'); div.appendChild(qb);
+  if (!started && diff <= 0) {
+    started = true;
+    startQuiz();
   }
 
-  if(questionPhase==='qphase'){
-    ['A','B','C','D'].forEach(l=>{
-      const b=document.createElement('button'); b.className=l.toLowerCase(); b.innerText=l+'? – '+q.answers[l]; b.onclick=()=>send(l+'?'); div.appendChild(b);
-    });
+  if (!started) {
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    document.getElementById("countdown").innerText =
+      `Počinje za ${m}:${s.toString().padStart(2,"0")}`;
   }
-}
+}, 500);
 
-function send(choice){
-  if(answered||watchMode) return;
-  answered=true;
-  db.ref(`answers/${currentIndex}/${name}`).set({choice,time:Date.now()});
-  document.getElementById('answers').classList.add('locked');
-}
+/* ================= JOIN ================= */
+function joinGame() {
+  const name = document.getElementById("playerName").value.trim();
+  if (!name) return alert("Upiši ime");
 
-// ================= GAME LOOP =================
-setInterval(()=>{
-  const now=Date.now();
-  if(now<START_TIME) return;
-
-  const total=questions.length;
-  const q=questions[currentIndex];
-  if(!q) return;
-
-  if(phase==='wait'){
-    phase='main'; phaseEnds=now+20000;
-    renderAnswers(q,'main');
-    document.getElementById('question').innerText=q.text;
-  }
-
-  if(phase==='main' && now>phaseEnds){
-    phase='qphase'; phaseEnds=now+10000;
-    renderAnswers(q,'qphase');
-  }
-
-  if(phase==='qphase' && now>phaseEnds){
-    phase='reveal'; phaseEnds=now+10000;
-    reveal(q);
-  }
-
-  if(phase==='reveal' && now>phaseEnds){
-    currentIndex++; phase='wait';
-  }
-
-  document.getElementById('timer').innerText=Math.max(0,Math.ceil((phaseEnds-now)/1000));
-  document.getElementById('roundInfo').innerText=`Pitanje ${currentIndex+1}/${total}`;
-},1000);
-
-// ================= LIVE ANSWERS =================
-db.ref('answers').on('value',snap=>{
-  let txt='';
-  snap.forEach(q=>{
-    q.forEach(p=>{ txt+=`${p.key}: ${p.val().choice} | `; });
+  player = name;
+  db.ref("players/"+player).set({
+    points:0, q:0, ex:0, time:0
   });
-  document.getElementById('live').innerText=txt;
-});
 
-// ================= REVEAL + LEADERBOARD =================
-function reveal(q){
-  const val=ROUND_VALUES[Math.floor(currentIndex/10)]||10;
-  db.ref(`answers/${currentIndex}`).once('value',snap=>{
-    snap.forEach(p=>{
-      const c=p.val().choice; if(!c||c==='?') return;
-      const l=c[0], t=c[1];
-      const pts=calc(t,l===q.correct,val);
-      db.ref('results/'+p.key).transaction(r=>{
-        if(!r) r={points:0,q:0,ex:0,time:0};
-        r.points+=pts; if(t==='?')r.q++; if(t==='!')r.ex++; return r;
-      });
-    });
+  document.getElementById("join").classList.add("hidden");
+}
+
+function watchMode() {
+  watch = true;
+  document.getElementById("join").classList.add("hidden");
+}
+
+/* ================= START QUIZ ================= */
+function startQuiz() {
+  document.getElementById("waiting").classList.add("hidden");
+  document.getElementById("quiz").classList.remove("hidden");
+
+  db.ref("game").set({
+    index: 0,
+    phase: "main",
+    ends: Date.now() + 20000
   });
 }
 
-db.ref('results').on('value',snap=>{
-  let arr=[]; snap.forEach(c=>arr.push({n:c.key,...c.val()}));
-  arr.sort((a,b)=>b.points-a.points||b.q-a.q||b.ex-a.ex||a.time-b.time);
-  let h='<table><tr><th>#</th><th>Igrač</th><th>Bodovi</th><th>?</th><th>!</th></tr>';
-  arr.forEach((p,i)=>h+=`<tr><td>${i+1}</td><td>${p.n}</td><td>${p.points}</td><td>${p.q||0}</td><td>${p.ex||0}</td></tr>`);
-  document.getElementById('leader').innerHTML=h+'</table>';
+/* ================= GAME LISTENER ================= */
+db.ref("game").on("value", snap => {
+  if (!snap.exists()) return;
+  const g = snap.val();
+
+  currentIndex = g.index;
+  phase = g.phase;
+
+  renderQuestion();
+});
+
+/* ================= RENDER ================= */
+function renderQuestion() {
+  const q = QUESTIONS[currentIndex];
+  if (!q) return;
+
+  document.getElementById("roundInfo").innerText =
+    `Krug ${q.round} – vrijednost ${q.value}`;
+
+  document.getElementById("questionText").innerText = q.text;
+
+  const box = document.getElementById("answers");
+  box.innerHTML = "";
+
+  Object.keys(q.answers).forEach(k => {
+    const btn = document.createElement("button");
+    btn.className = "answer";
+    btn.innerText = `${k}: ${q.answers[k]}`;
+    btn.onclick = () => answer(k);
+    if (watch) btn.disabled = true;
+    box.appendChild(btn);
+  });
+}
+
+/* ================= ANSWER ================= */
+function answer(letter) {
+  if (!player) return;
+
+  db.ref("answers/"+currentIndex+"/"+player).set({
+    answer: letter,
+    time: Date.now()
+  });
+}
+
+/* ================= LIVE ANSWERS ================= */
+db.ref("answers").on("value", snap => {
+  const box = document.getElementById("players");
+  box.innerHTML = "";
+
+  if (!snap.exists()) return;
+
+  const qSnap = snap.child(currentIndex);
+  qSnap.forEach(p => {
+    const span = document.createElement("span");
+    span.innerText = `${p.key}: ${p.val().answer}`;
+    box.appendChild(span);
+  });
 });
 </script>
+
 </body>
 </html>
